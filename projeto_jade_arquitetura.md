@@ -138,3 +138,36 @@ Para os recrutadores ou outros devs, esse projeto demonstra:
 - **Engenharia de IA:** Uso avançado de LLMs como Agentes com acesso a ferramentas (*Function Calling*), não apenas geradores de texto.
 - **RAG (Retrieval-Augmented Generation):** Busca semântica e embeddings no Obsidian.
 - **Arquitetura Escalável:** Módulos separados onde adicionar uma nova habilidade é tão fácil quanto criar um novo arquivo em `tools/`.
+
+---
+
+## 8. Escopo Estendido / Evolução
+
+Direções que guiam o projeto além do roadmap base:
+
+### A. Memória = o próprio Obsidian do usuário
+O banco de memória do Jade **é** o vault do Obsidian, no PC do usuário
+(*privacy-first* levado ao limite):
+- **Toda conversa** com o Jade é persistida como nota `.md` no vault
+  (`core/journal.py`), com frontmatter (**título, data, tags**) e tag aninhada
+  `#conversa/AAAA-MM-DD` + link para o hub `[[Jade — Memória]]`. Assim o **grafo
+  do Obsidian** conecta as conversas por grupo, data e título.
+- Essas notas são reindexadas no RAG: o histórico vira memória de longo prazo.
+- O vault fica numa pasta local dedicada (`OBSIDIAN_VAULT_PATH`, ex.:
+  `./obsidian_notes`) que o usuário abre no Obsidian.
+
+### B. "Pensamento próprio" (emulação de persona)
+Meta de longo prazo: a partir do acúmulo de conversas e do **modo como o usuário
+fala**, o Jade passa a **imitar ideias, tom e preferências** do usuário —
+aproximando-se de "sentimentos e ideias" baseados nele. Fundação: a memória em
+Obsidian (item A) como corpus pessoal.
+
+### C. Roteamento dual-model (Claude + llama3)
+Dois "modos de IA" com um **roteador** que escolhe o modelo por tipo de tarefa:
+- **llama3 (local):** ações comuns, rápidas e rastreáveis pela memória/PC —
+  ex.: renomear uma pasta, comandos simples, coisas já presentes no vault.
+- **Claude (nuvem):** raciocínio mais complexo e informativo — ex.: "como
+  preparar tal receita", análises que exigem conhecimento amplo.
+- Objetivo: privacidade e custo baixos por padrão (local), recorrendo à nuvem só
+  quando agrega. *(Nota técnica: assinatura Claude Pro ≠ API da Anthropic; a
+  forma de acesso será definida na implementação desta fase.)*

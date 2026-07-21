@@ -8,6 +8,16 @@ orquestra **tools** (habilidades) para agir sobre Obsidian, WhatsApp, voz,
 Spotify, e-mail e o SO. Memória de longo prazo via **RAG** sobre o vault do
 Obsidian. Documento-fonte da arquitetura: `projeto_jade_arquitetura.md`.
 
+## Escopo & Visão (ler `projeto_jade_arquitetura.md` §8)
+- **Memória = o Obsidian do usuário.** Toda conversa vira nota `.md` no vault
+  (`core/journal.py`), com frontmatter (título/data/tags) + `#conversa/AAAA-MM-DD`
+  e link `[[Jade — Memória]]` — o grafo conecta por grupo/data/título. Notas são
+  reindexadas no RAG (histórico = memória de longo prazo).
+- **Meta futura:** "pensamento próprio" — emular tom/ideias do usuário a partir
+  das conversas acumuladas.
+- **Roteamento dual-model (futuro):** llama3 (local) p/ ações comuns/rastreáveis
+  (ex.: renomear pasta); Claude (nuvem) p/ complexo/informativo (ex.: receita).
+
 ## Stack
 - **Backend:** Python 3.11+ · FastAPI · LangChain
 - **LLM:** Ollama (local, padrão) ou OpenAI/Anthropic/Gemini — escolhido por `JADE_LLM_PROVIDER`

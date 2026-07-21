@@ -64,7 +64,12 @@ def run_index() -> None:
 def run_cli() -> None:
     from core.chat import ChatSession
 
-    print("🟢 Jade despertou. Digite sua mensagem ('/sair' para encerrar, '/reset' para limpar).\n")
+    print("🟢 Jade despertou. Digite sua mensagem ('/sair' para encerrar, '/reset' para limpar).")
+    if settings.JOURNAL_ENABLED:
+        print(
+            f"🧠 Memória: as conversas são salvas em {settings.OBSIDIAN_VAULT_PATH / settings.CONVERSATIONS_SUBDIR}"
+        )
+    print()
     try:
         session = ChatSession()
     except Exception as e:

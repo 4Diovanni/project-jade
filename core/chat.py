@@ -1,14 +1,19 @@
-"""Motor de conversa do Jade — chat com o LLM, persona, histórico e RAG.
+"""Motor de conversa do Jade — chat com o LLM, persona, histórico, RAG e memória.
 
-Fase 2: a cada mensagem, recupera trechos relevantes das anotações do Obsidian
-(via `core.memory.query_memory`) e injeta como contexto. Se não houver índice
-ou o RAG falhar, cai graciosamente para conversa normal.
+- RAG: a cada mensagem, recupera trechos das anotações do Obsidian e injeta
+  como contexto (fallback silencioso para conversa normal).
+- Memória: cada conversa é persistida como nota .md no vault (`core.journal`),
+  virando memória de longo prazo do Jade.
 """
 
 from __future__ import annotations
 
+import contextlib
+
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+from core.config import settings
+from core.journal import ConversationJournal
 from core.llm_engine import get_llm
 
 SYSTEM_PROMPT = (
@@ -29,12 +34,20 @@ _CONTEXT_TEMPLATE = (
 
 
 class ChatSession:
-    """Mantém o histórico de uma conversa, consulta o RAG e fala com o LLM."""
+    """Mantém o histórico de uma conversa, consulta o RAG, fala com o LLM e
+    registra a conversa no vault do Obsidian."""
 
-    def __init__(self, *, use_rag: bool = True) -> None:
+    def __init__(self, *, use_rag: bool = True, use_journal: bool | None = None) -> None:
         self._llm = get_llm()
         self._use_rag = use_rag
         self._history: list = [SystemMessage(content=SYSTEM_PROMPT)]
+        enabled = settings.JOURNAL_ENABLED if use_journal is None else use_journal
+        self._journal: ConversationJournal | None = ConversationJournal() if enabled else None
+
+    @property
+    def journal_path(self):
+        """Caminho da nota .md desta conversa (None até o primeiro turno)."""
+        return self._journal.path if self._journal else None
 
     def _retrieve_context(self, message: str) -> str:
         """Busca trechos relevantes no RAG. Silencioso se indisponível."""
@@ -65,8 +78,15 @@ class ChatSession:
         response = self._llm.invoke(prompt_messages)
         text = response.content if hasattr(response, "content") else str(response)
         self._history.append(AIMessage(content=text))
+
+        # Persistir a conversa nunca deve derrubar o chat.
+        if self._journal is not None:
+            with contextlib.suppress(Exception):
+                self._journal.record(message, text)
         return text
 
     def reset(self) -> None:
-        """Limpa o histórico, mantendo apenas a persona."""
+        """Limpa o histórico e inicia uma nova nota de conversa."""
         self._history = [SystemMessage(content=SYSTEM_PROMPT)]
+        if self._journal is not None:
+            self._journal = ConversationJournal()
