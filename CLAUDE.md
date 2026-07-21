@@ -95,6 +95,10 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
   "Giovanni") em `Sobre o Usuário.md`, aprendido via LLM ao encerrar conversa.
   `core/journal.py` liga conversas por tema (`[[Relacionadas]]`) e indexa cada
   conversa no RAG (memória entre chats). System prompt montado por turno.
+- **Auto-sync do vault** (`core/memory.py sync_vault`): `ChatSession` indexa
+  incrementalmente (`.md`/`.txt`, por mtime, estado em `database/index_state.json`)
+  arquivos novos/alterados na 1ª busca de cada sessão — largar arquivo no vault
+  "só funciona". Notas internas da Jade (humor/perfil/personalidade) ficam fora do RAG.
 
 **Próximo:** Spotify e e-mail (Fase 4) · WhatsApp.
 

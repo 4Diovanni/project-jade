@@ -67,7 +67,12 @@ O Jade lê as notas do seu **vault do Obsidian** e responde com base nelas.
 
 > **Toda conversa vira uma nota `.md`** em `obsidian_notes/Conversas/`, com
 > data, título e tags. Abra a pasta `obsidian_notes` no Obsidian para ver as
-> conexões no grafo. Rode `index` de novo para o Jade "lembrar" das conversas.
+> conexões no grafo.
+
+**Dar arquivos para a Jade analisar:** largue `.md` ou `.txt` em qualquer lugar
+do vault (sugestão: a pasta `Documentos/`). Na **próxima conversa** ela indexa
+sozinha o que for novo/alterado — não precisa rodar `index`. Depois é só
+perguntar sobre o conteúdo.
 
 ### 🔊 Voz — falar e ouvir
 ```powershell
