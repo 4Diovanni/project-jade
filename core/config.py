@@ -15,6 +15,18 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _resolve_path(value: str, default: Path) -> Path:
+    """Resolve um caminho vindo do .env: remove espaços e ancora caminhos
+    relativos no diretório do projeto (BASE_DIR), não no CWD de execução."""
+    raw = (value or "").strip()
+    if not raw:
+        return default
+    path = Path(raw)
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path.resolve()
+
+
 class Settings:
     # ── LLM ──
     LLM_PROVIDER: str = os.getenv("JADE_LLM_PROVIDER", "ollama")
@@ -26,7 +38,11 @@ class Settings:
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
     # ── Obsidian ──
-    OBSIDIAN_VAULT_PATH: Path = Path(os.getenv("OBSIDIAN_VAULT_PATH", str(BASE_DIR))).resolve()
+    OBSIDIAN_VAULT_PATH: Path = _resolve_path(os.getenv("OBSIDIAN_VAULT_PATH", ""), BASE_DIR)
+    # Subpasta do vault onde as conversas com o Jade viram notas .md.
+    CONVERSATIONS_SUBDIR: str = os.getenv("JADE_CONVERSATIONS_SUBDIR", "Conversas")
+    # Persistir cada conversa em Markdown no vault (memória de longo prazo).
+    JOURNAL_ENABLED: bool = os.getenv("JADE_JOURNAL_ENABLED", "true").strip().lower() != "false"
 
     # ── Bancos de dados ──
     CHROMA_DB_PATH: str = os.getenv("CHROMA_DB_PATH", str(BASE_DIR / "database" / "chroma_db"))
