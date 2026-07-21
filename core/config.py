@@ -54,6 +54,14 @@ class Settings:
     RAG_CHUNK_OVERLAP: int = int(os.getenv("RAG_CHUNK_OVERLAP", "120"))
     RAG_TOP_K: int = int(os.getenv("RAG_TOP_K", "4"))
 
+    # ── Voz (Fase 3) ──
+    # STT local (faster-whisper): tiny|base|small|medium|large-v3
+    WHISPER_MODEL: str = os.getenv("JADE_WHISPER_MODEL", "base")
+    WHISPER_LANGUAGE: str = os.getenv("JADE_WHISPER_LANGUAGE", "pt")
+    # TTS: "edge" (online, alta qualidade) ou "pyttsx3" (100% offline)
+    TTS_BACKEND: str = os.getenv("JADE_TTS_BACKEND", "edge")
+    TTS_VOICE: str = os.getenv("JADE_TTS_VOICE", "pt-BR-FranciscaNeural")
+
     # ── API ──
     API_HOST: str = os.getenv("JADE_API_HOST", "127.0.0.1")
     API_PORT: int = int(os.getenv("JADE_API_PORT", "8000"))

@@ -36,7 +36,7 @@ project-jade/
 
 - [x] **Fase 1 — O Despertar:** API FastAPI + LLM + chat via terminal.
 - [x] **Fase 2 — Conexão com o Passado:** ChromaDB + leitura do Obsidian (RAG).
-- [ ] **Fase 3 — Os Sentidos:** WhatsApp + voz (Whisper/TTS).
+- [x] **Fase 3 (voz) — Os Sentidos:** STT local (faster-whisper) + TTS (edge-tts). *WhatsApp adiado p/ fase futura.*
 - [ ] **Fase 4 — As Mãos:** Spotify, controle do SO e e-mail.
 
 Detalhes completos em [`projeto_jade_arquitetura.md`](./projeto_jade_arquitetura.md).
@@ -58,7 +58,14 @@ copy .env.example .env      # e preencha suas chaves / caminho do vault
 
 python main.py index        # indexa suas notas do Obsidian no ChromaDB (RAG)
 python main.py chat         # chat no terminal, com RAG das suas anotações
-python main.py              # ou sobe a API: /chat /search /index /reset /health
+
+# Voz (Fase 3) — precisa de: pip install faster-whisper edge-tts
+python main.py say "Olá, eu sou o Jade"    # TTS: fala o texto
+python main.py transcribe audio.mp3         # STT: transcreve um áudio
+
+python main.py              # ou sobe a API:
+#   /chat /search /index /reset /health
+#   /voice/transcribe  /voice/tts  /voice/chat
 ```
 
 ## 🔒 Privacidade & Segurança

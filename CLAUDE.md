@@ -68,7 +68,13 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
 - **Decisão de design:** agente multi-tool (`core/agent_router.py`) fica para a
   Fase 4 (llama3 não faz tool-calling confiável); Fase 2 usa RAG direto no chat.
 
-**Próximo:** Fase 3 (WhatsApp + voz).
+- Fase 3 (voz): `interfaces/voice_service.py` — STT local `faster-whisper`
+  (sem PyTorch) + TTS `edge-tts` (padrão) ou `pyttsx3` (offline). CLI
+  `python main.py say "..."` e `transcribe <audio>`; endpoints `/voice/transcribe`
+  `/voice/tts` `/voice/chat`. **WhatsApp adiado** (cliente não-oficial, risco de
+  ban; será serviço Node em `interfaces/whatsapp_bot/`).
+
+**Próximo:** WhatsApp (voz feita) e/ou Fase 4 (Spotify, SO, e-mail) + roteador dual-model.
 
 ## Workflow de git (OBRIGATÓRIO)
 Nunca commitar direto na `main` (branch protection ativa). Toda mudança: criar

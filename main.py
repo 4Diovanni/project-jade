@@ -101,11 +101,51 @@ def run_cli() -> None:
         print(f"jade › {reply}\n")
 
 
+def run_transcribe() -> None:
+    """STT: transcreve um arquivo de áudio (python main.py transcribe <audio>)."""
+    from interfaces.voice_service import transcribe
+
+    if len(sys.argv) < 3:
+        print("Uso: python main.py transcribe <arquivo_de_audio>")
+        return
+    audio = sys.argv[2]
+    print(f"🎧 Transcrevendo {audio} (modelo whisper '{settings.WHISPER_MODEL}')...")
+    try:
+        text = transcribe(audio)
+    except Exception as e:
+        print(f"❌ Falha no STT: {e}")
+        return
+    print(f"📝 {text}")
+
+
+def run_say() -> None:
+    """TTS: fala um texto ou salva em arquivo (python main.py say "texto" [saida])."""
+    from interfaces.voice_service import speak, synthesize
+
+    if len(sys.argv) < 3:
+        print('Uso: python main.py say "texto" [arquivo_de_saida]')
+        return
+    text = sys.argv[2]
+    try:
+        if len(sys.argv) >= 4:
+            path = synthesize(text, sys.argv[3])
+            print(f"🔊 Áudio salvo em {path}")
+        else:
+            speak(text)
+            print("🔊 (falado)")
+    except Exception as e:
+        print(f"❌ Falha no TTS: {e}")
+
+
 if __name__ == "__main__":
     command = sys.argv[1] if len(sys.argv) > 1 else ""
     if command == "chat":
         run_cli()
     elif command == "index":
         run_index()
+    elif command == "transcribe":
+        run_transcribe()
+    elif command == "say":
+        run_say()
     else:
         run_api()
