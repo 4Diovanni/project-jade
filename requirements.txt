@@ -2,7 +2,7 @@
 fastapi>=0.110
 uvicorn[standard]>=0.29
 python-dotenv>=1.0
-pydantic>=2.6
+pydantic>=2.13.4
 langchain-core>=0.2
 langchain-ollama>=0.1        # provider local padrão (Ollama / llama3)
 langchain-anthropic>=0.1     # provider "nuvem" do roteador dual-model (Claude)
