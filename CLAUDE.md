@@ -40,7 +40,7 @@ Obsidian. Documento-fonte da arquitetura: `projeto_jade_arquitetura.md`.
 Pipeline em `.github/workflows/` + `.pre-commit-config.yaml`. Rode localmente:
 - `ruff check . && ruff format .` — lint + formatação (config em `pyproject.toml`).
 - `bandit -c pyproject.toml -r core tools interfaces main.py` — SAST.
-- `pip-audit -r requirements.txt` — vulnerabilidades de deps.
+- `pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-311` — vulnerabilidades de deps (a exceção é o CVE do servidor HTTP do ChromaDB, que não usamos; ver SECURITY.md).
 - `pytest` — testes de fumaça (não dependem do LLM/Ollama).
 
 Para swallow de exceção use `contextlib.suppress` (Bandit rejeita try/except/pass).

@@ -31,7 +31,13 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pip-audit
-      - run: pip-audit -r requirements.txt
+      # Exceção documentada (ver SECURITY.md > Exceções conhecidas):
+      # PYSEC-2026-311 é injeção de código PRÉ-AUTH no SERVIDOR HTTP do ChromaDB
+      # (endpoint /api/v2/.../collections com trust_remote_code). NÃO aplicável:
+      # usamos chromadb embarcado (PersistentClient, sem servidor/rede) e nunca
+      # setamos trust_remote_code. Sem versão corrigida (1.5.9 é a última).
+      # Reavaliar quando houver release de chromadb > 1.5.9.
+      - run: pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-311
 
   gitleaks:
     name: Gitleaks (segredos)
