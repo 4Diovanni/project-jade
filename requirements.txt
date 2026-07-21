@@ -1,5 +1,5 @@
 # ── Fase 1: Core / API / LLM (deps atuais) ───────────────────
-fastapi>=0.110
+fastapi>=0.139.2
 uvicorn[standard]>=0.29
 python-dotenv>=1.0
 pydantic>=2.6
