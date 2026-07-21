@@ -2,8 +2,11 @@
 
 - **STT**: `faster-whisper`, 100% local (privacy-first, sem PyTorch). O modelo é
   baixado na primeira execução e cacheado.
-- **TTS**: `edge-tts` (online, vozes pt-BR de alta qualidade) ou `pyttsx3`
-  (100% offline). Escolhido por `settings.TTS_BACKEND`.
+- **TTS**: `edge-tts` (online, vozes pt-BR de alta qualidade → **.mp3**) ou
+  `pyttsx3` (100% offline → .wav). Escolhido por `settings.TTS_BACKEND`.
+
+Ao salvar, o arquivo recebe a extensão/formato corretos automaticamente, para
+ser consumível tanto pelo Jade quanto pelo usuário.
 
 Todos os imports pesados são preguiçosos: importar este módulo não puxa as libs
 de voz nem baixa modelos.
@@ -14,11 +17,15 @@ from __future__ import annotations
 import contextlib
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from core.config import settings
 
 _whisper_model = None
+
+# Formato de arquivo produzido por cada backend de TTS.
+_EXT_BY_BACKEND = {"edge": ".mp3", "pyttsx3": ".wav"}
 
 
 # ── STT (voz -> texto) ───────────────────────────────────────
@@ -41,6 +48,13 @@ def transcribe(audio_path: str | Path, language: str | None = None) -> str:
 
 
 # ── TTS (texto -> voz) ───────────────────────────────────────
+def _output_path(out_path: str | Path, backend: str) -> Path:
+    """Ajusta a extensão do arquivo ao formato real do backend (.mp3/.wav)."""
+    out = Path(out_path)
+    ext = _EXT_BY_BACKEND.get(backend)
+    return out.with_suffix(ext) if ext else out
+
+
 def synthesize(
     text: str,
     out_path: str | Path,
@@ -48,18 +62,28 @@ def synthesize(
     backend: str | None = None,
     voice: str | None = None,
 ) -> Path:
-    """Gera um arquivo de áudio a partir do texto. Retorna o caminho gerado."""
+    """Gera um arquivo de áudio a partir do texto. Retorna o caminho REAL gerado
+    (com a extensão correta: .mp3 no backend edge, .wav no pyttsx3)."""
     backend = (backend or settings.TTS_BACKEND).lower()
-    out = Path(out_path)
+    if backend not in _EXT_BY_BACKEND:
+        raise ValueError(f"Backend de TTS desconhecido: {backend!r} (use 'edge' ou 'pyttsx3').")
+
+    out = _output_path(out_path, backend)
     out.parent.mkdir(parents=True, exist_ok=True)
 
     if backend == "edge":
         _synthesize_edge(text, out, voice or settings.TTS_VOICE)
-    elif backend == "pyttsx3":
+    else:  # pyttsx3
         _synthesize_pyttsx3(text, out)
-    else:
-        raise ValueError(f"Backend de TTS desconhecido: {backend!r} (use 'edge' ou 'pyttsx3').")
     return out
+
+
+def synthesize_reply(text: str, *, backend: str | None = None, voice: str | None = None) -> Path:
+    """Salva uma fala do Jade como arquivo de áudio (mp3, por padrão) em
+    `settings.AUDIO_OUTPUT_DIR`, com nome carimbado por data/hora. Retorna o caminho."""
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    destino = settings.AUDIO_OUTPUT_DIR / f"jade_{stamp}"
+    return synthesize(text, destino, backend=backend, voice=voice)
 
 
 def _synthesize_edge(text: str, out: Path, voice: str) -> None:
