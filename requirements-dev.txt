@@ -5,6 +5,6 @@
 ruff>=0.6            # lint + format + import-sort
 bandit[toml]>=1.7   # SAST (análise estática de segurança)
 pip-audit>=2.7      # auditoria de vulnerabilidades nas dependências
-pre-commit>=3.7     # hooks de git (roda as checagens antes do commit)
+pre-commit>=4.6.0     # hooks de git (roda as checagens antes do commit)
 pytest>=8.0         # testes
 httpx>=0.27         # requerido pelo TestClient do FastAPI
