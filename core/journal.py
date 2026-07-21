@@ -62,8 +62,14 @@ class ConversationJournal:
             self._related = self._find_related(user_message)
         self._turns.append((user_message, jade_reply))
         self._path.write_text(self._render(), encoding="utf-8")
-        self._index_self()
         return self._path
+
+    def finalize(self) -> None:
+        """Indexa a conversa no RAG — chamado ao ENCERRAR a conversa.
+
+        Indexar só no fim evita o loop em que a conversa em andamento é
+        recuperada e re-injetada no contexto (respostas se repetindo)."""
+        self._index_self()
 
     # ── internos ──
     def _find_related(self, seed: str) -> list[str]:
