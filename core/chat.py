@@ -1,9 +1,11 @@
-"""Motor de conversa do Jade — chat com o LLM, persona, histórico, RAG e memória.
+"""Motor de conversa do Jade — tools, LLM, persona, histórico, RAG e memória.
 
-- RAG: a cada mensagem, recupera trechos das anotações do Obsidian e injeta
-  como contexto (fallback silencioso para conversa normal).
-- Memória: cada conversa é persistida como nota .md no vault (`core.journal`),
-  virando memória de longo prazo do Jade.
+Fluxo de cada mensagem:
+1. **Roteamento**: se alguma tool aceita a mensagem (ex.: "abra a calculadora"),
+   ela é executada e sua resposta é retornada (as "mãos" do Jade).
+2. Caso contrário, **chat com RAG**: recupera trechos do Obsidian e conversa.
+
+Toda troca é registrada como nota .md no vault (`core.journal`).
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ import contextlib
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+from core.agent_router import route
 from core.config import settings
 from core.journal import ConversationJournal
 from core.llm_engine import get_llm
@@ -34,12 +37,14 @@ _CONTEXT_TEMPLATE = (
 
 
 class ChatSession:
-    """Mantém o histórico de uma conversa, consulta o RAG, fala com o LLM e
-    registra a conversa no vault do Obsidian."""
+    """Roteia para tools, consulta o RAG, fala com o LLM e registra a conversa."""
 
-    def __init__(self, *, use_rag: bool = True, use_journal: bool | None = None) -> None:
+    def __init__(
+        self, *, use_rag: bool = True, use_tools: bool = True, use_journal: bool | None = None
+    ) -> None:
         self._llm = get_llm()
         self._use_rag = use_rag
+        self._use_tools = use_tools
         self._history: list = [SystemMessage(content=SYSTEM_PROMPT)]
         enabled = settings.JOURNAL_ENABLED if use_journal is None else use_journal
         self._journal: ConversationJournal | None = ConversationJournal() if enabled else None
@@ -48,6 +53,14 @@ class ChatSession:
     def journal_path(self):
         """Caminho da nota .md desta conversa (None até o primeiro turno)."""
         return self._journal.path if self._journal else None
+
+    def _record(self, message: str, text: str) -> None:
+        """Persiste o turno no diário (nunca derruba o chat)."""
+        self._history.append(HumanMessage(content=message))
+        self._history.append(AIMessage(content=text))
+        if self._journal is not None:
+            with contextlib.suppress(Exception):
+                self._journal.record(message, text)
 
     def _retrieve_context(self, message: str) -> str:
         """Busca trechos relevantes no RAG. Silencioso se indisponível."""
@@ -63,26 +76,28 @@ class ChatSession:
         return "\n\n".join(chunks)
 
     def send(self, message: str) -> str:
-        """Envia uma mensagem do usuário e retorna a resposta do Jade."""
-        context = self._retrieve_context(message)
+        """Processa uma mensagem: primeiro tenta uma tool, senão conversa (RAG)."""
+        # 1) Roteamento para tools (as "mãos" do Jade).
+        if self._use_tools:
+            tool = route(message)
+            if tool is not None:
+                try:
+                    text = tool.run(message)
+                except Exception as e:
+                    text = f"Não consegui executar a ação: {e}"
+                self._record(message, text)
+                return text
 
-        # O histórico guarda a mensagem original (limpa); o contexto do RAG é
-        # injetado apenas na chamada ao LLM, para não poluir a conversa.
-        self._history.append(HumanMessage(content=message))
+        # 2) Chat com RAG. O contexto é injetado só na chamada ao LLM.
+        context = self._retrieve_context(message)
+        history_for_llm = [*self._history, HumanMessage(content=message)]
         if context:
             augmented = _CONTEXT_TEMPLATE.format(context=context, question=message)
-            prompt_messages = [*self._history[:-1], HumanMessage(content=augmented)]
-        else:
-            prompt_messages = self._history
+            history_for_llm = [*self._history, HumanMessage(content=augmented)]
 
-        response = self._llm.invoke(prompt_messages)
+        response = self._llm.invoke(history_for_llm)
         text = response.content if hasattr(response, "content") else str(response)
-        self._history.append(AIMessage(content=text))
-
-        # Persistir a conversa nunca deve derrubar o chat.
-        if self._journal is not None:
-            with contextlib.suppress(Exception):
-                self._journal.record(message, text)
+        self._record(message, text)
         return text
 
     def reset(self) -> None:

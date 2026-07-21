@@ -37,7 +37,7 @@ project-jade/
 - [x] **Fase 1 — O Despertar:** API FastAPI + LLM + chat via terminal.
 - [x] **Fase 2 — Conexão com o Passado:** ChromaDB + leitura do Obsidian (RAG).
 - [x] **Fase 3 (voz) — Os Sentidos:** STT local (faster-whisper) + TTS (edge-tts). *WhatsApp adiado p/ fase futura.*
-- [ ] **Fase 4 — As Mãos:** Spotify, controle do SO e e-mail.
+- [ ] **Fase 4 — As Mãos:** controle do SO (abrir apps, volume, busca web) ✅ · Spotify e e-mail (próximos).
 
 Detalhes completos em [`projeto_jade_arquitetura.md`](./projeto_jade_arquitetura.md).
 

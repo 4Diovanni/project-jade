@@ -74,7 +74,13 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
   `/voice/tts` `/voice/chat`. **WhatsApp adiado** (cliente não-oficial, risco de
   ban; será serviço Node em `interfaces/whatsapp_bot/`).
 
-**Próximo:** WhatsApp (voz feita) e/ou Fase 4 (Spotify, SO, e-mail) + roteador dual-model.
+- Fase 4 (As Mãos — em progresso): `core/agent_router.py` faz **roteamento
+  determinístico** (cada tool declara `trigger_hints` e valida em `accepts()`;
+  sem depender de tool-calling do llama3). `tools/system_tool.py` = controle do
+  SO (abrir apps de **whitelist**, volume via teclas de mídia, busca web);
+  `ChatSession` roteia p/ tool antes do RAG. Falta: Spotify e e-mail.
+
+**Próximo:** Spotify e e-mail (Fase 4) · WhatsApp · roteador dual-model (Claude+llama3).
 
 ## Workflow de git (OBRIGATÓRIO)
 Nunca commitar direto na `main` (branch protection ativa). Toda mudança: criar

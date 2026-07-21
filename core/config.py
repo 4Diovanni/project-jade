@@ -67,6 +67,12 @@ class Settings:
         os.getenv("JADE_AUDIO_DIR", ""), OBSIDIAN_VAULT_PATH / "Áudios"
     )
 
+    # ── Tools / Mãos (Fase 4) ──
+    # Liga/desliga o controle do sistema operacional (abrir apps, volume...).
+    SYSTEM_TOOL_ENABLED: bool = (
+        os.getenv("JADE_SYSTEM_TOOL_ENABLED", "true").strip().lower() != "false"
+    )
+
     # ── API ──
     API_HOST: str = os.getenv("JADE_API_HOST", "127.0.0.1")
     API_PORT: int = int(os.getenv("JADE_API_PORT", "8000"))

@@ -8,10 +8,12 @@ from __future__ import annotations
 
 from tools.base import JadeTool
 from tools.obsidian_tool import ObsidianSearchTool
+from tools.system_tool import SystemControlTool
 
 _TOOLS: list[JadeTool] = [
+    SystemControlTool(),
     ObsidianSearchTool(),
-    # Registre novas tools aqui (Spotify, sistema, e-mail, calendário...).
+    # Registre novas tools aqui (Spotify, e-mail, calendário...).
 ]
 
 
