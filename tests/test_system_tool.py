@@ -16,6 +16,7 @@ def test_parse_volume():
 def test_parse_abrir_app_da_whitelist():
     kind, value = _parse("abra a calculadora")
     assert kind == "open"
+    assert isinstance(value, tuple)
     assert value[1] == "calc.exe"
 
 
