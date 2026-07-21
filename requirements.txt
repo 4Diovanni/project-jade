@@ -1,0 +1,24 @@
+# ── Fase 1: Core / API ───────────────────────────────────────
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-dotenv>=1.0
+pydantic>=2.6
+
+# ── Fase 1/2: Orquestração de IA e LLM ───────────────────────
+langchain>=0.2
+langchain-community>=0.2
+# Escolha conforme JADE_LLM_PROVIDER:
+langchain-ollama>=0.1        # local (Ollama)
+# langchain-openai>=0.1
+# langchain-anthropic>=0.1
+
+# ── Fase 2: Memória / RAG (Obsidian) ─────────────────────────
+chromadb>=0.5
+sentence-transformers>=2.7    # embeddings locais (alternativa a APIs)
+
+# ── Fase 3+: Sentidos e Mãos (descomente ao chegar na fase) ──
+# openai-whisper                # STT (voz -> texto)
+# edge-tts                      # TTS local
+# spotipy                       # módulo Spotify
+# pyautogui                     # controle do SO
+# google-api-python-client      # Gmail / Calendar

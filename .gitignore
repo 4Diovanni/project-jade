@@ -1,0 +1,45 @@
+# ─────────────────────────────────────────────────────────────
+# Project Jade — .gitignore
+# Este repositório vive DENTRO do vault do Obsidian. As regras
+# abaixo garantem que apenas o código do projeto seja versionado.
+# ─────────────────────────────────────────────────────────────
+
+# Segredos e configuração local
+.env
+.env.local
+*.key
+
+# Estado do editor Obsidian (layout/plugins pessoais)
+.obsidian/
+
+# Notas pessoais do vault na raiz — mantêm-se PRIVADAS.
+# Só os documentos do projeto (whitelist abaixo) são versionados.
+/*.md
+!/README.md
+!/projeto_jade_arquitetura.md
+!/CLAUDE.md
+
+# Bancos de dados locais (gerados em runtime)
+database/chroma_db/
+database/*.db
+database/*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Node (whatsapp_bot)
+node_modules/
+npm-debug.log*
+
+# SO / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
