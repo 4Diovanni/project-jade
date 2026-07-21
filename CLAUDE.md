@@ -80,7 +80,15 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
   SO (abrir apps de **whitelist**, volume via teclas de mídia, busca web);
   `ChatSession` roteia p/ tool antes do RAG. Falta: Spotify e e-mail.
 
-**Próximo:** Spotify e e-mail (Fase 4) · WhatsApp · roteador dual-model (Claude+llama3).
+- **Roteador dual-model** (`core/model_router.py`): `ChatSession` decide entre
+  **llama3 (local)** e **Claude (nuvem)** por turno. Heurística determinística:
+  dados pessoais/RAG e conversa comum → local (privacidade); perguntas
+  informativas/complexas → Claude. Só escala se houver `ANTHROPIC_API_KEY`
+  (senão fica 100% local). Model default `claude-opus-4-8` (via `langchain-anthropic`;
+  **não** passar `temperature` — Opus 4.8 dá 400). `ANTHROPIC_API_KEY` vem do
+  console.anthropic.com, ≠ assinatura Claude Pro.
+
+**Próximo:** Spotify e e-mail (Fase 4) · WhatsApp.
 
 ## Workflow de git (OBRIGATÓRIO)
 Nunca commitar direto na `main` (branch protection ativa). Toda mudança: criar

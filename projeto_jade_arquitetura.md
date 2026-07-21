@@ -162,8 +162,9 @@ fala**, o Jade passa a **imitar ideias, tom e preferências** do usuário —
 aproximando-se de "sentimentos e ideias" baseados nele. Fundação: a memória em
 Obsidian (item A) como corpus pessoal.
 
-### C. Roteamento dual-model (Claude + llama3)
-Dois "modos de IA" com um **roteador** que escolhe o modelo por tipo de tarefa:
+### C. Roteamento dual-model (Claude + llama3) — ✅ implementado
+Dois "modos de IA" com um **roteador** (`core/model_router.py`) que escolhe o
+modelo por tipo de tarefa:
 - **llama3 (local):** ações comuns, rápidas e rastreáveis pela memória/PC —
   ex.: renomear uma pasta, comandos simples, coisas já presentes no vault.
 - **Claude (nuvem):** raciocínio mais complexo e informativo — ex.: "como

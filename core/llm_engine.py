@@ -1,7 +1,9 @@
-"""Factory do LLM — devolve o modelo de chat conforme JADE_LLM_PROVIDER.
+"""Factory do LLM — devolve o modelo de chat conforme o provider.
 
-Os imports de cada provider são feitos de forma preguiçosa (dentro da função),
-para que faltar a lib de um provider que você não usa não quebre o import.
+`get_llm()` usa o provider padrão (`JADE_LLM_PROVIDER`, normalmente Ollama);
+`get_llm("anthropic")` devolve o Claude para o roteador dual-model.
+Os imports de cada provider são preguiçosos, para que faltar a lib de um
+provider que você não usa não quebre o import.
 """
 
 from __future__ import annotations
@@ -11,13 +13,13 @@ import os
 from core.config import settings
 
 
-def get_llm():
-    """Retorna uma instância de chat LLM (LangChain) conforme o provider ativo.
+def get_llm(provider: str | None = None):
+    """Retorna uma instância de chat LLM (LangChain) para o provider dado.
 
     Levanta um erro claro se a lib do provider não estiver instalada ou se
     faltar a chave de API necessária.
     """
-    provider = settings.LLM_PROVIDER.lower()
+    provider = (provider or settings.LLM_PROVIDER).lower()
 
     if provider == "ollama":
         try:
@@ -50,10 +52,12 @@ def get_llm():
             from langchain_anthropic import ChatAnthropic
         except ImportError as e:  # pragma: no cover
             raise RuntimeError("Rode: pip install langchain-anthropic") from e
+        # NÃO passar temperature: modelos Opus 4.8 / Sonnet 5 rejeitam o parâmetro.
         return ChatAnthropic(
-            model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5"),
+            model=settings.ANTHROPIC_MODEL,
             api_key=settings.ANTHROPIC_API_KEY,
-            temperature=0.7,
+            max_tokens=4096,
+            timeout=60,
         )
 
-    raise ValueError(f"Provider de LLM desconhecido: {settings.LLM_PROVIDER!r}")
+    raise ValueError(f"Provider de LLM desconhecido: {provider!r}")

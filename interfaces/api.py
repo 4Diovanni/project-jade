@@ -39,11 +39,12 @@ def health() -> dict:
 
 @app.post("/chat")
 def chat(req: ChatRequest) -> dict:
+    session = _get_session()
     try:
-        reply = _get_session().send(req.message)
+        reply = session.send(req.message)
     except Exception as e:  # provider fora do ar, chave faltando, etc.
         raise HTTPException(status_code=503, detail=f"Jade indisponível: {e}") from e
-    return {"reply": reply}
+    return {"reply": reply, "model": session.last_model}
 
 
 @app.post("/reset")

@@ -4,10 +4,9 @@ uvicorn[standard]>=0.29
 python-dotenv>=1.0
 pydantic>=2.6
 langchain-core>=0.2
-langchain-ollama>=0.1        # provider local padrão (Ollama)
-# Providers de nuvem (descomente conforme JADE_LLM_PROVIDER):
-# langchain-openai>=0.1
-# langchain-anthropic>=0.1
+langchain-ollama>=0.1        # provider local padrão (Ollama / llama3)
+langchain-anthropic>=0.1     # provider "nuvem" do roteador dual-model (Claude)
+# langchain-openai>=0.1      # (opcional) provider OpenAI
 
 # ── Fase 2: Memória / RAG do Obsidian ────────────────────────
 chromadb>=0.5

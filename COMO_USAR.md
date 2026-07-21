@@ -107,7 +107,16 @@ No chat, peça naturalmente:
 
 A cada mensagem, o Jade primeiro verifica se é um **comando** (abrir app, volume,
 busca). Se for, ele age. Se não, **conversa** — buscando nas suas anotações
-quando fizer sentido. Simples e previsível.
+quando fizer sentido.
+
+**Dois cérebros (roteador dual-model):** se você configurar uma `ANTHROPIC_API_KEY`,
+o Jade manda perguntas **informativas/complexas** (ex.: "como preparar tal receita")
+para o **Claude** (nuvem, mais capaz), e mantém no **llama3** (local) a conversa
+comum e tudo que toca suas **notas pessoais** — privacidade. Sem chave, fica 100%
+no llama3. No chat, um selo `☁️claude` indica quando a resposta veio da nuvem.
+
+> A chave vem do <https://console.anthropic.com> (uso pago por token) — é
+> **diferente** da assinatura Claude Pro do site/app, que não dá acesso à API.
 
 ---
 
@@ -181,8 +190,6 @@ As opções que você provavelmente vai querer mexer:
 
 - 🎵 **Spotify** e 📧 **e-mail** (Fase 4 — as Mãos).
 - 📱 **WhatsApp** (falar com o Jade pelo celular).
-- 🧭 **Roteador dual-model**: usar o Claude para perguntas complexas e o llama3
-  para tarefas simples/locais.
 - 🪞 **Memória evolutiva**: o Jade aprender seu jeito a partir das conversas.
 
 Detalhes técnicos no `README.md` e no `projeto_jade_arquitetura.md`.

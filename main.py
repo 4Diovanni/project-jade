@@ -98,7 +98,8 @@ def run_cli() -> None:
         except Exception as e:
             print(f"❌ Erro ao responder.\n{_provider_hint(e)}\n")
             continue
-        print(f"jade › {reply}\n")
+        tag = " ☁️claude" if session.last_model == "claude" else ""
+        print(f"jade{tag} › {reply}\n")
 
 
 def run_transcribe() -> None:

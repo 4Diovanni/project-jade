@@ -1,9 +1,11 @@
-"""Motor de conversa do Jade — tools, LLM, persona, histórico, RAG e memória.
+"""Motor de conversa do Jade — tools, roteador dual-model, RAG e memória.
 
 Fluxo de cada mensagem:
-1. **Roteamento**: se alguma tool aceita a mensagem (ex.: "abra a calculadora"),
+1. **Tools**: se alguma tool aceita a mensagem (ex.: "abra a calculadora"),
    ela é executada e sua resposta é retornada (as "mãos" do Jade).
-2. Caso contrário, **chat com RAG**: recupera trechos do Obsidian e conversa.
+2. **Roteamento de modelo**: recupera contexto do Obsidian e decide o cérebro —
+   **llama3 (local)** para conversa/dados pessoais, **Claude (nuvem)** para
+   perguntas informativas/complexas (se houver chave; senão, tudo local).
 
 Toda troca é registrada como nota .md no vault (`core.journal`).
 """
@@ -18,6 +20,7 @@ from core.agent_router import route
 from core.config import settings
 from core.journal import ConversationJournal
 from core.llm_engine import get_llm
+from core.model_router import choose_route, cloud_available
 
 SYSTEM_PROMPT = (
     "Você é o Jade, um assistente pessoal que roda localmente na máquina do usuário. "
@@ -37,22 +40,43 @@ _CONTEXT_TEMPLATE = (
 
 
 class ChatSession:
-    """Roteia para tools, consulta o RAG, fala com o LLM e registra a conversa."""
+    """Roteia para tools/modelos, consulta o RAG, fala com o LLM e registra a conversa."""
 
     def __init__(
-        self, *, use_rag: bool = True, use_tools: bool = True, use_journal: bool | None = None
+        self,
+        *,
+        use_rag: bool = True,
+        use_tools: bool = True,
+        use_router: bool = True,
+        use_journal: bool | None = None,
     ) -> None:
-        self._llm = get_llm()
+        self._local_llm = get_llm()  # provider padrão (Ollama / llama3)
+        self._cloud_llm = None  # Claude — criado sob demanda
         self._use_rag = use_rag
         self._use_tools = use_tools
+        self._use_router = use_router
         self._history: list = [SystemMessage(content=SYSTEM_PROMPT)]
         enabled = settings.JOURNAL_ENABLED if use_journal is None else use_journal
         self._journal: ConversationJournal | None = ConversationJournal() if enabled else None
+        #: qual cérebro respondeu o último turno: "tool" | "llama3" | "claude"
+        self.last_model: str | None = None
 
     @property
     def journal_path(self):
         """Caminho da nota .md desta conversa (None até o primeiro turno)."""
         return self._journal.path if self._journal else None
+
+    def _get_cloud_llm(self):
+        if self._cloud_llm is None:
+            self._cloud_llm = get_llm(settings.CLOUD_PROVIDER)
+        return self._cloud_llm
+
+    def _try_cloud_llm(self):
+        """Devolve o LLM da nuvem, ou None se indisponível (sem chave, lib, etc.)."""
+        try:
+            return self._get_cloud_llm()
+        except Exception:
+            return None
 
     def _record(self, message: str, text: str) -> None:
         """Persiste o turno no diário (nunca derruba o chat)."""
@@ -75,8 +99,20 @@ class ChatSession:
             return ""
         return "\n\n".join(chunks)
 
+    def _pick_llm(self, message: str, has_context: bool):
+        """Escolhe o cérebro (local/nuvem) e registra em `last_model`."""
+        can_cloud = self._use_router and cloud_available()
+        route = choose_route(message, has_context=has_context, cloud_available=can_cloud)
+        if route == "cloud":
+            llm = self._try_cloud_llm()
+            if llm is not None:
+                self.last_model = "claude"
+                return llm
+        self.last_model = "llama3"
+        return self._local_llm
+
     def send(self, message: str) -> str:
-        """Processa uma mensagem: primeiro tenta uma tool, senão conversa (RAG)."""
+        """Processa uma mensagem: tool → senão conversa (modelo escolhido + RAG)."""
         # 1) Roteamento para tools (as "mãos" do Jade).
         if self._use_tools:
             tool = route(message)
@@ -85,17 +121,20 @@ class ChatSession:
                     text = tool.run(message)
                 except Exception as e:
                     text = f"Não consegui executar a ação: {e}"
+                self.last_model = "tool"
                 self._record(message, text)
                 return text
 
-        # 2) Chat com RAG. O contexto é injetado só na chamada ao LLM.
+        # 2) Conversa. Contexto do RAG é injetado só na chamada ao LLM.
         context = self._retrieve_context(message)
+        llm = self._pick_llm(message, has_context=bool(context))
+
         history_for_llm = [*self._history, HumanMessage(content=message)]
         if context:
             augmented = _CONTEXT_TEMPLATE.format(context=context, question=message)
             history_for_llm = [*self._history, HumanMessage(content=augmented)]
 
-        response = self._llm.invoke(history_for_llm)
+        response = llm.invoke(history_for_llm)
         text = response.content if hasattr(response, "content") else str(response)
         self._record(message, text)
         return text
@@ -103,5 +142,6 @@ class ChatSession:
     def reset(self) -> None:
         """Limpa o histórico e inicia uma nova nota de conversa."""
         self._history = [SystemMessage(content=SYSTEM_PROMPT)]
+        self.last_model = None
         if self._journal is not None:
             self._journal = ConversationJournal()
