@@ -73,6 +73,14 @@ class Settings:
         os.getenv("JADE_SYSTEM_TOOL_ENABLED", "true").strip().lower() != "false"
     )
 
+    # ── Roteador dual-model (llama3 local + Claude na nuvem) ──
+    # Provider "nuvem" para perguntas complexas/informativas.
+    CLOUD_PROVIDER: str = os.getenv("JADE_CLOUD_PROVIDER", "anthropic")
+    # Modelo do Claude. Precisa de ANTHROPIC_API_KEY (≠ assinatura Claude Pro).
+    ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-opus-4-8")
+    # Liga o roteamento; só escala para a nuvem se houver chave (senão fica local).
+    ROUTER_ENABLED: bool = os.getenv("JADE_ROUTER_ENABLED", "true").strip().lower() != "false"
+
     # ── API ──
     API_HOST: str = os.getenv("JADE_API_HOST", "127.0.0.1")
     API_PORT: int = int(os.getenv("JADE_API_PORT", "8000"))
