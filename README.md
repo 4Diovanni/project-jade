@@ -41,6 +41,10 @@ project-jade/
 
 Detalhes completos em [`projeto_jade_arquitetura.md`](./projeto_jade_arquitetura.md).
 
+## 📖 Como usar
+
+Guia prático de uso (setup, comandos, voz, controle do PC, API): [`COMO_USAR.md`](./COMO_USAR.md).
+
 ## 🚀 Setup (desenvolvimento)
 
 ```bash
