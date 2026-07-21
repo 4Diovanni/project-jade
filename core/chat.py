@@ -51,6 +51,7 @@ class ChatSession:
         self._journal: ConversationJournal | None = ConversationJournal() if enabled else None
         #: qual cérebro respondeu o último turno: "tool" | "llama3" | "claude"
         self.last_model: str | None = None
+        self._synced = False  # sincroniza o vault (arquivos novos) na 1ª busca
 
     @property
     def journal_path(self):
@@ -94,9 +95,20 @@ class ChatSession:
             with contextlib.suppress(Exception):
                 self._journal.record(message, text)
 
+    def _ensure_synced(self) -> None:
+        """Indexa arquivos novos/alterados do vault — uma vez por sessão."""
+        if self._synced:
+            return
+        self._synced = True
+        with contextlib.suppress(Exception):
+            from core.memory import sync_vault
+
+            sync_vault()
+
     def _retrieve_context(self, message: str) -> str:
         if not self._use_rag:
             return ""
+        self._ensure_synced()
         try:
             from core.memory import query_memory
 

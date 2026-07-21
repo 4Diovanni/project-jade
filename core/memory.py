@@ -8,9 +8,21 @@ Usado pela skill `sync-obsidian-rag`.
 from __future__ import annotations
 
 import contextlib
+import json
 from pathlib import Path
 
 from core.config import settings
+
+
+def _meta_notes() -> set[str]:
+    """Notas internas da Jade (humor/perfil/personalidade/hub) — fora do RAG."""
+    return {
+        settings.PERSONALITY_NOTE,
+        settings.MOOD_NOTE,
+        settings.PROFILE_NOTE,
+        "Jade — Memória.md",
+    }
+
 
 # Caches de módulo (inicialização preguiçosa).
 _embedder = None
@@ -18,14 +30,18 @@ _collection = None
 
 
 def iter_vault_notes(vault: Path | None = None):
-    """Percorre o vault do Obsidian retornando os caminhos de notas .md,
-    pulando as pastas de `settings.VAULT_IGNORE` (código, .obsidian, etc.)."""
+    """Percorre o vault retornando os arquivos de texto (.md/.txt) a indexar,
+    pulando `settings.VAULT_IGNORE` e as notas internas da Jade."""
     vault = (vault or settings.OBSIDIAN_VAULT_PATH).resolve()
-    for md in vault.rglob("*.md"):
-        parts = set(md.relative_to(vault).parts)
-        if parts & settings.VAULT_IGNORE:
-            continue
-        yield md
+    meta = _meta_notes()
+    for pattern in ("*.md", "*.txt"):
+        for f in vault.rglob(pattern):
+            parts = set(f.relative_to(vault).parts)
+            if parts & settings.VAULT_IGNORE:
+                continue
+            if f.name in meta:
+                continue
+            yield f
 
 
 def chunk_text(text: str) -> list[str]:
@@ -83,6 +99,7 @@ def reindex_vault() -> int:
     ids: list[str] = []
     docs: list[str] = []
     metas: list[dict] = []
+    state: dict = {}
     n_notes = 0
 
     for md in iter_vault_notes():
@@ -94,12 +111,15 @@ def reindex_vault() -> int:
             continue
         n_notes += 1
         rel = str(md.relative_to(settings.OBSIDIAN_VAULT_PATH))
+        with contextlib.suppress(OSError):
+            state[rel] = md.stat().st_mtime
         for i, chunk in enumerate(chunks):
             ids.append(f"{rel}::{i}")
             docs.append(chunk)
             metas.append({"source": rel, "chunk": i})
 
     if not docs:
+        _save_state({})
         return 0
 
     embedder = _get_embedder()
@@ -117,6 +137,7 @@ def reindex_vault() -> int:
             embeddings=embeddings[start:end],
             metadatas=metas[start:end],
         )
+    _save_state(state)  # mantém o cache incremental consistente com o reindex
     return n_notes
 
 
@@ -184,3 +205,55 @@ def related_sources(text: str, k: int = 3, exclude: str | None = None) -> list[s
         if len(out) >= k:
             break
     return out
+
+
+# ── Sincronização incremental (arquivos novos/alterados) ─────
+def _state_path() -> Path:
+    return Path(settings.CHROMA_DB_PATH).parent / "index_state.json"
+
+
+def _load_state() -> dict:
+    p = _state_path()
+    if not p.exists():
+        return {}
+    with contextlib.suppress(Exception):
+        return json.loads(p.read_text(encoding="utf-8"))
+    return {}
+
+
+def _save_state(state: dict) -> None:
+    p = _state_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with contextlib.suppress(Exception):
+        p.write_text(json.dumps(state), encoding="utf-8")
+
+
+def _delete_source(rel: str) -> None:
+    with contextlib.suppress(Exception):
+        _get_collection().delete(where={"source": rel})
+
+
+def sync_vault() -> int:
+    """Indexa apenas os arquivos novos/alterados do vault (usa mtime como cache).
+
+    Assim, arquivos largados no vault para a Jade analisar são incorporados
+    automaticamente, sem `python main.py index`. Retorna nº de arquivos indexados."""
+    state = _load_state()
+    seen: set[str] = set()
+    changed = 0
+    for f in iter_vault_notes():
+        rel = _rel(f)
+        seen.add(rel)
+        try:
+            mtime = f.stat().st_mtime
+        except OSError:
+            continue
+        if state.get(rel) != mtime:
+            index_note(f)
+            state[rel] = mtime
+            changed += 1
+    for gone in [s for s in state if s not in seen]:  # notas removidas do vault
+        _delete_source(gone)
+        state.pop(gone, None)
+    _save_state(state)
+    return changed

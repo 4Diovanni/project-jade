@@ -31,6 +31,7 @@
 database/chroma_db/
 database/*.db
 database/*.sqlite3
+database/index_state.json
 
 # Python
 __pycache__/
