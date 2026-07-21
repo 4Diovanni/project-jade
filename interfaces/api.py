@@ -127,15 +127,32 @@ def voice_tts(req: TTSRequest) -> FileResponse:
 
 @app.post("/voice/chat")
 async def voice_chat(file: UploadFile = File(...)) -> dict:
-    """Áudio (upload) -> transcrição -> Jade (RAG + memória) -> resposta em texto."""
-    from interfaces.voice_service import transcribe
+    """Áudio (upload) -> transcrição -> Jade (RAG + memória) -> resposta em texto
+    E em áudio: a fala do Jade é salva como .mp3 (consumível por ele e por você)."""
+    from interfaces.voice_service import synthesize_reply, transcribe
 
     tmp = _save_upload(file)
     try:
         transcription = transcribe(tmp)
         reply = _get_session().send(transcription)
+        audio_path = synthesize_reply(reply)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Falha no voice chat: {e}") from e
     finally:
         tmp.unlink(missing_ok=True)
-    return {"transcription": transcription, "reply": reply}
+    return {
+        "transcription": transcription,
+        "reply": reply,
+        "audio_file": str(audio_path),
+        "audio_url": f"/voice/audio/{audio_path.name}",
+    }
+
+
+@app.get("/voice/audio/{name}")
+def voice_audio(name: str) -> FileResponse:
+    """Baixa um áudio gerado pelo Jade (salvo em AUDIO_OUTPUT_DIR)."""
+    safe = Path(name).name  # evita path traversal
+    path = settings.AUDIO_OUTPUT_DIR / safe
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Áudio não encontrado.")
+    return FileResponse(path, media_type="audio/mpeg", filename=safe)

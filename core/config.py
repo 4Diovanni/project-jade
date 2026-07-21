@@ -61,6 +61,11 @@ class Settings:
     # TTS: "edge" (online, alta qualidade) ou "pyttsx3" (100% offline)
     TTS_BACKEND: str = os.getenv("JADE_TTS_BACKEND", "edge")
     TTS_VOICE: str = os.getenv("JADE_TTS_VOICE", "pt-BR-FranciscaNeural")
+    # Onde os áudios gerados pelo Jade são salvos (padrão: subpasta do vault,
+    # visível no Obsidian). São .mp3 (backend edge) consumíveis por ele e por você.
+    AUDIO_OUTPUT_DIR: Path = _resolve_path(
+        os.getenv("JADE_AUDIO_DIR", ""), OBSIDIAN_VAULT_PATH / "Áudios"
+    )
 
     # ── API ──
     API_HOST: str = os.getenv("JADE_API_HOST", "127.0.0.1")
