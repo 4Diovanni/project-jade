@@ -1,4 +1,5 @@
 """Voz do Jade — STT (Whisper) e TTS (Edge-TTS/ElevenLabs). Fase 3."""
+
 from __future__ import annotations
 
 

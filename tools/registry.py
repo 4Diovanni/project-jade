@@ -3,6 +3,7 @@
 Para expor uma nova habilidade ao Jade, importe-a e adicione uma instância
 em `_TOOLS`. (Passo automatizado pela skill `add-jade-tool`.)
 """
+
 from __future__ import annotations
 
 from tools.base import JadeTool

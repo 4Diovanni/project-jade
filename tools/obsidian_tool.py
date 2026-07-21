@@ -2,6 +2,7 @@
 
 Habilidade central do Jade: responde perguntas sobre o que o usuário anotou.
 """
+
 from __future__ import annotations
 
 from core.memory import query_memory

@@ -2,6 +2,7 @@
 
 Toda a aplicação deve importar `settings` daqui, nunca chamar os.getenv solto.
 """
+
 from __future__ import annotations
 
 import os
@@ -24,9 +25,7 @@ class Settings:
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
     # ── Obsidian ──
-    OBSIDIAN_VAULT_PATH: Path = Path(
-        os.getenv("OBSIDIAN_VAULT_PATH", str(BASE_DIR))
-    ).resolve()
+    OBSIDIAN_VAULT_PATH: Path = Path(os.getenv("OBSIDIAN_VAULT_PATH", str(BASE_DIR))).resolve()
 
     # ── Bancos de dados ──
     CHROMA_DB_PATH: str = os.getenv("CHROMA_DB_PATH", str(BASE_DIR / "database" / "chroma_db"))
@@ -38,8 +37,14 @@ class Settings:
 
     # Pastas/arquivos do vault que NUNCA devem ser indexados no RAG.
     VAULT_IGNORE: set[str] = {
-        ".obsidian", ".claude", ".git", "database",
-        "__pycache__", ".venv", "venv", "node_modules",
+        ".obsidian",
+        ".claude",
+        ".git",
+        "database",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "node_modules",
     }
 
 

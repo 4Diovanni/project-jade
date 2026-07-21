@@ -1,20 +1,19 @@
-# ── Fase 1: Core / API ───────────────────────────────────────
+# ── Fase 1: Core / API / LLM (deps atuais) ───────────────────
 fastapi>=0.110
 uvicorn[standard]>=0.29
 python-dotenv>=1.0
 pydantic>=2.6
-
-# ── Fase 1/2: Orquestração de IA e LLM ───────────────────────
-langchain>=0.2
-langchain-community>=0.2
-# Escolha conforme JADE_LLM_PROVIDER:
-langchain-ollama>=0.1        # local (Ollama)
+langchain-core>=0.2
+langchain-ollama>=0.1        # provider local padrão (Ollama)
+# Providers de nuvem (descomente conforme JADE_LLM_PROVIDER):
 # langchain-openai>=0.1
 # langchain-anthropic>=0.1
 
-# ── Fase 2: Memória / RAG (Obsidian) ─────────────────────────
-chromadb>=0.5
-sentence-transformers>=2.7    # embeddings locais (alternativa a APIs)
+# ── Fase 2: Memória / RAG do Obsidian (descomente na Fase 2) ──
+# langchain>=0.2
+# langchain-community>=0.2
+# chromadb>=0.5
+# sentence-transformers>=2.7    # embeddings locais (privacy-first)
 
 # ── Fase 3+: Sentidos e Mãos (descomente ao chegar na fase) ──
 # openai-whisper                # STT (voz -> texto)

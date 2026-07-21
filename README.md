@@ -1,5 +1,9 @@
 # 🟢 Project Jade
 
+[![CI](https://github.com/4Diovanni/project-jade/actions/workflows/ci.yml/badge.svg)](https://github.com/4Diovanni/project-jade/actions/workflows/ci.yml)
+[![Security](https://github.com/4Diovanni/project-jade/actions/workflows/security.yml/badge.svg)](https://github.com/4Diovanni/project-jade/actions/workflows/security.yml)
+[![CodeQL](https://github.com/4Diovanni/project-jade/actions/workflows/codeql.yml/badge.svg)](https://github.com/4Diovanni/project-jade/actions/workflows/codeql.yml)
+
 > Um assistente pessoal **agentic**, *privacy-first*, que roda localmente e unifica suas ferramentas, notas e rotinas sob um único comando.
 
 O nome remete ao **Selo Imperial de Jade** de Qin Shi Huang, o imperador que unificou a China. Assim como o Selo unificou os 7 reinos, o **Jade** unifica Obsidian, WhatsApp, voz, Spotify, e-mail e o próprio sistema operacional em um só cérebro.
@@ -30,7 +34,7 @@ project-jade/
 
 ## 🗺️ Roadmap
 
-- [ ] **Fase 1 — O Despertar:** API FastAPI + LLM + chat via terminal.
+- [x] **Fase 1 — O Despertar:** API FastAPI + LLM + chat via terminal.
 - [ ] **Fase 2 — Conexão com o Passado:** ChromaDB + leitura do Obsidian (RAG).
 - [ ] **Fase 3 — Os Sentidos:** WhatsApp + voz (Whisper/TTS).
 - [ ] **Fase 4 — As Mãos:** Spotify, controle do SO e e-mail.
@@ -46,12 +50,33 @@ pip install -r requirements.txt
 
 copy .env.example .env      # e preencha suas chaves / caminho do vault
 
-python main.py              # ou: uvicorn interfaces.api:app --reload
+# Provider padrão = Ollama (local). Instale-o e baixe um modelo:
+#   https://ollama.com/download  →  ollama pull llama3
+# (ou troque JADE_LLM_PROVIDER=openai/anthropic e ponha a chave no .env)
+
+python main.py chat         # chat no terminal (Fase 1)
+python main.py             # ou sobe a API: POST /chat, GET /health
 ```
 
-## 🔒 Privacidade
+## 🔒 Privacidade & Segurança
 
 Este repositório vive **dentro** de um vault do Obsidian. Suas notas pessoais **não** são versionadas — o `.gitignore` protege `.env`, os bancos de dados e as notas `.md` da raiz. Jade lê o vault localmente pelo caminho em `OBSIDIAN_VAULT_PATH`.
+
+Toda alteração passa por uma **pipeline de segurança automatizada**:
+
+| Camada | Ferramenta |
+|---|---|
+| Segredos (código + histórico) | **Gitleaks** (CI + pre-commit) |
+| Análise estática (SAST) | **Bandit** · **CodeQL** |
+| Vulnerabilidades em dependências | **pip-audit** · **Dependabot** |
+| Lint / formatação | **Ruff** |
+
+Detalhes e como reportar falhas: [`SECURITY.md`](./SECURITY.md). Para ativar os hooks locais:
+
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+```
 
 ---
 

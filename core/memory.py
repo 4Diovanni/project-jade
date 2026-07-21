@@ -2,9 +2,8 @@
 
 Usado pela skill `sync-obsidian-rag` para (re)indexar o vault.
 """
-from __future__ import annotations
 
-from pathlib import Path
+from __future__ import annotations
 
 from core.config import settings
 
@@ -29,9 +28,7 @@ def reindex_vault() -> int:
       3. upsert na coleção Chroma em `settings.CHROMA_DB_PATH`.
     """
     notes = list(iter_vault_notes())
-    raise NotImplementedError(
-        f"Fase 2: indexar {len(notes)} notas do vault no ChromaDB."
-    )
+    raise NotImplementedError(f"Fase 2: indexar {len(notes)} notas do vault no ChromaDB.")
 
 
 def query_memory(question: str, k: int = 4) -> list[str]:

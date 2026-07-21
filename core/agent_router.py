@@ -1,8 +1,12 @@
 """Roteador de agente: dado um comando, o LLM decide qual tool acionar.
 
-É o coração *agentic* do Jade. Monta o agente LangChain a partir das tools
-registradas em `tools/registry.py`.
+É o coração *agentic* do Jade (Fase 2). Monta o agente LangChain a partir das
+tools registradas em `tools/registry.py`.
+
+Na Fase 1, o Jade apenas conversa — sem tools — via `core.chat.ChatSession`.
+Este módulo passa a ser usado quando as tools estiverem prontas (Fase 2+).
 """
+
 from __future__ import annotations
 
 from core.llm_engine import get_llm

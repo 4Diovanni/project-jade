@@ -36,6 +36,20 @@ Obsidian. Documento-fonte da arquitetura: `projeto_jade_arquitetura.md`.
 - **add-jade-tool** — scaffold de uma nova tool + registro no roteador.
 - **sync-obsidian-rag** — (re)indexar o vault no ChromaDB para o RAG.
 
+## Qualidade & Segurança (obrigatório antes de commitar)
+Pipeline em `.github/workflows/` + `.pre-commit-config.yaml`. Rode localmente:
+- `ruff check . && ruff format .` — lint + formatação (config em `pyproject.toml`).
+- `bandit -c pyproject.toml -r core tools interfaces main.py` — SAST.
+- `pip-audit -r requirements.txt` — vulnerabilidades de deps.
+- `pytest` — testes de fumaça (não dependem do LLM/Ollama).
+
+Para swallow de exceção use `contextlib.suppress` (Bandit rejeita try/except/pass).
+Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-audit/gitleaks), `codeql.yml`.
+
 ## Estado atual
-Ambiente preparado (esqueleto + skills + git/GitHub). Implementação das fases
-ainda por fazer — os módulos são stubs com `TODO`. Começar pela **Fase 1**.
+**Fase 1 concluída:** LLM real conectado (`core/llm_engine.py`), motor de
+conversa com persona e histórico (`core/chat.py`), CLI (`python main.py chat`)
+e endpoints `/chat` `/reset` `/health`. Sem tools ainda — chat puro.
+Para rodar de verdade: Ollama instalado + `ollama pull llama3` (ou provider de
+nuvem com chave no `.env`). **Próximo:** Fase 2 (ChromaDB + RAG do Obsidian +
+roteamento agentic em `core/agent_router.py`).

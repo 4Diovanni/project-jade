@@ -4,6 +4,7 @@ Toda nova capacidade do assistente é uma subclasse de `JadeTool`. O agente
 descobre as tools pelo `name`/`description` e as executa via `run()`.
 Ver a skill `add-jade-tool` para o passo a passo de criação.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

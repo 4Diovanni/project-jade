@@ -1,0 +1,12 @@
+title = "Project Jade — gitleaks config"
+
+# Mantém todas as regras padrão do gitleaks e adiciona nossos ajustes.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Ignora arquivos de exemplo/documentação sem segredos reais"
+paths = [
+  '''\.env\.example''',
+  '''.*\.md''',
+]
