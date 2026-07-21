@@ -80,12 +80,14 @@ def run_cli() -> None:
         try:
             user = input("você › ").strip()
         except (EOFError, KeyboardInterrupt):
+            session.learn_from_conversation()
             print("\nAté logo. 👋")
             break
 
         if not user:
             continue
         if user.lower() in {"/sair", "/exit", "/quit"}:
+            session.learn_from_conversation()
             print("Até logo. 👋")
             break
         if user.lower() == "/reset":

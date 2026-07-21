@@ -10,6 +10,7 @@ literalmente, o Obsidian do usuário).
 
 from __future__ import annotations
 
+import contextlib
 import re
 from datetime import datetime
 from pathlib import Path
@@ -47,6 +48,7 @@ class ConversationJournal:
         self._title: str | None = None
         self._turns: list[tuple[str, str]] = []
         self._path: Path | None = None
+        self._related: list[str] = []
 
     @property
     def path(self) -> Path | None:
@@ -57,11 +59,34 @@ class ConversationJournal:
         if self._title is None:
             self._title = _title_from(user_message)
             self._path = self._build_path()
+            self._related = self._find_related(user_message)
         self._turns.append((user_message, jade_reply))
         self._path.write_text(self._render(), encoding="utf-8")
+        self._index_self()
         return self._path
 
     # ── internos ──
+    def _find_related(self, seed: str) -> list[str]:
+        """Conversas passadas mais parecidas (por tema) — best-effort."""
+        if self._vault != settings.OBSIDIAN_VAULT_PATH:
+            return []  # vault de teste: não toca no RAG real
+        with contextlib.suppress(Exception):
+            from core.memory import related_sources
+
+            exclude = str(self._path.relative_to(self._vault)) if self._path else None
+            return related_sources(seed, k=3, exclude=exclude)
+        return []
+
+    def _index_self(self) -> None:
+        """Indexa esta conversa no RAG para virar memória entre chats — best-effort."""
+        if self._vault != settings.OBSIDIAN_VAULT_PATH:
+            return
+        with contextlib.suppress(Exception):
+            from core.memory import index_note
+
+            if self._path is not None:
+                index_note(self._path)
+
     def _build_path(self) -> Path:
         folder = self._vault / settings.CONVERSATIONS_SUBDIR
         folder.mkdir(parents=True, exist_ok=True)
@@ -95,6 +120,10 @@ class ConversationJournal:
             "tags: [conversa, jade]\n"
             "---\n\n"
         )
-        header = f"# {title}\n\nConversa com o Jade · [[Jade — Memória]] · #conversa/{date}\n\n"
+        header = f"# {title}\n\nConversa com o Jade · [[Jade — Memória]] · #conversa/{date}\n"
+        if self._related:
+            links = " · ".join(f"[[{Path(s).stem}]]" for s in self._related)
+            header += f"Relacionadas: {links}\n"
+        header += "\n"
         body = "\n".join(f"**Você:** {user}\n\n**Jade:** {reply}\n" for user, reply in self._turns)
         return frontmatter + header + body
