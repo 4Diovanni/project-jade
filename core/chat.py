@@ -24,8 +24,9 @@ from core.model_router import choose_route, cloud_available
 from core.persona import build_system_prompt
 
 _CONTEXT_TEMPLATE = (
-    "Contexto recuperado das minhas anotações do Obsidian "
-    "(use se for relevante):\n\n{context}\n\n---\nPergunta: {question}"
+    "Algumas anotações que talvez ajudem (use apenas se responderem à pergunta; "
+    "NÃO as liste nem repita conversas passadas):\n\n{context}\n\n---\n"
+    "Responda de forma objetiva SÓ a esta mensagem: {question}"
 )
 
 
@@ -148,13 +149,16 @@ class ChatSession:
         return "\n".join(lines)
 
     def learn_from_conversation(self) -> None:
-        """Extrai fatos duráveis sobre o usuário desta conversa (best-effort)."""
-        if not settings.PROFILE_UPDATE_ENABLED or len(self._history) < 4:
-            return
-        with contextlib.suppress(Exception):
-            from core.profile import update_from_conversation
+        """Encerra a conversa: indexa no RAG (memória entre chats) e aprende sobre
+        o usuário. Indexar só aqui evita o loop de a conversa se recuperar a si mesma."""
+        if self._journal is not None:
+            with contextlib.suppress(Exception):
+                self._journal.finalize()
+        if settings.PROFILE_UPDATE_ENABLED and len(self._history) >= 4:
+            with contextlib.suppress(Exception):
+                from core.profile import update_from_conversation
 
-            update_from_conversation(self._transcript(), self._local_llm)
+                update_from_conversation(self._transcript(), self._local_llm)
 
     def reset(self) -> None:
         """Aprende com a conversa, limpa o histórico e inicia uma nova nota."""
