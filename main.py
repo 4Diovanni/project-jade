@@ -44,6 +44,23 @@ def _provider_hint(error: Exception) -> str:
     return f"Falha ao falar com o provider '{settings.LLM_PROVIDER}': {error}"
 
 
+def run_index() -> None:
+    """(Re)indexa o vault do Obsidian no ChromaDB (RAG)."""
+    from core.memory import reindex_vault
+
+    print(f"📚 Indexando o vault do Obsidian ({settings.OBSIDIAN_VAULT_PATH})...")
+    try:
+        n = reindex_vault()
+    except Exception as e:
+        print(
+            f"❌ Falha ao indexar: {e}\n"
+            "Verifique se o Ollama está rodando e se o modelo de embeddings existe:\n"
+            f"  ollama pull {settings.OLLAMA_EMBED_MODEL}"
+        )
+        return
+    print(f"✓ {n} nota(s) indexada(s) no ChromaDB (coleção '{settings.CHROMA_COLLECTION}').")
+
+
 def run_cli() -> None:
     from core.chat import ChatSession
 
@@ -80,7 +97,10 @@ def run_cli() -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "chat":
+    command = sys.argv[1] if len(sys.argv) > 1 else ""
+    if command == "chat":
         run_cli()
+    elif command == "index":
+        run_index()
     else:
         run_api()

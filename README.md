@@ -35,7 +35,7 @@ project-jade/
 ## 🗺️ Roadmap
 
 - [x] **Fase 1 — O Despertar:** API FastAPI + LLM + chat via terminal.
-- [ ] **Fase 2 — Conexão com o Passado:** ChromaDB + leitura do Obsidian (RAG).
+- [x] **Fase 2 — Conexão com o Passado:** ChromaDB + leitura do Obsidian (RAG).
 - [ ] **Fase 3 — Os Sentidos:** WhatsApp + voz (Whisper/TTS).
 - [ ] **Fase 4 — As Mãos:** Spotify, controle do SO e e-mail.
 
@@ -50,12 +50,15 @@ pip install -r requirements.txt
 
 copy .env.example .env      # e preencha suas chaves / caminho do vault
 
-# Provider padrão = Ollama (local). Instale-o e baixe um modelo:
-#   https://ollama.com/download  →  ollama pull llama3
+# Provider padrão = Ollama (local). Instale-o e baixe os modelos:
+#   https://ollama.com/download
+#   ollama pull llama3               # LLM de conversa
+#   ollama pull nomic-embed-text     # embeddings do RAG (Fase 2)
 # (ou troque JADE_LLM_PROVIDER=openai/anthropic e ponha a chave no .env)
 
-python main.py chat         # chat no terminal (Fase 1)
-python main.py             # ou sobe a API: POST /chat, GET /health
+python main.py index        # indexa suas notas do Obsidian no ChromaDB (RAG)
+python main.py chat         # chat no terminal, com RAG das suas anotações
+python main.py              # ou sobe a API: /chat /search /index /reset /health
 ```
 
 ## 🔒 Privacidade & Segurança

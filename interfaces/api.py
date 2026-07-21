@@ -44,3 +44,32 @@ def chat(req: ChatRequest) -> dict:
 def reset() -> dict:
     _get_session().reset()
     return {"status": "histórico limpo"}
+
+
+@app.post("/index")
+def index() -> dict:
+    """(Re)indexa o vault do Obsidian no ChromaDB."""
+    from core.memory import reindex_vault
+
+    try:
+        n = reindex_vault()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Falha ao indexar: {e}") from e
+    return {"indexed_notes": n}
+
+
+class SearchRequest(BaseModel):
+    query: str
+    k: int | None = None
+
+
+@app.post("/search")
+def search(req: SearchRequest) -> dict:
+    """Busca semântica direta nas anotações indexadas."""
+    from core.memory import query_memory
+
+    try:
+        results = query_memory(req.query, k=req.k)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Falha na busca: {e}") from e
+    return {"results": results}

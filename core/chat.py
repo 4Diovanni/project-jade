@@ -1,7 +1,8 @@
-"""Motor de conversa da Fase 1 — chat direto com o LLM, com persona e histórico.
+"""Motor de conversa do Jade — chat com o LLM, persona, histórico e RAG.
 
-Ainda SEM tools: a decisão de qual ferramenta usar (roteamento agentic) chega
-na Fase 2, em `core/agent_router.py`. Aqui o Jade apenas conversa.
+Fase 2: a cada mensagem, recupera trechos relevantes das anotações do Obsidian
+(via `core.memory.query_memory`) e injeta como contexto. Se não houver índice
+ou o RAG falhar, cai graciosamente para conversa normal.
 """
 
 from __future__ import annotations
@@ -14,24 +15,54 @@ SYSTEM_PROMPT = (
     "Você é o Jade, um assistente pessoal que roda localmente na máquina do usuário. "
     "Seu propósito é unificar as ferramentas e rotinas dele sob um só comando. "
     "Responda sempre em português do Brasil, de forma direta, prática e cordial. "
-    "Seja conciso: nada de enrolação. Se não souber algo ou ainda não tiver a "
-    "ferramenta para fazer, diga isso com honestidade. "
-    "Estamos na Fase 1 (só conversa); acesso ao Obsidian, WhatsApp, voz e sistema "
-    "chega nas próximas fases."
+    "Seja conciso: nada de enrolação. "
+    "Quando eu fornecer trechos das anotações do Obsidian do usuário como contexto, "
+    "baseie sua resposta neles e cite a nota de origem quando útil. Se o contexto não "
+    "contiver a resposta, diga isso com honestidade e responda com seu conhecimento "
+    "geral, deixando claro que não veio das anotações."
+)
+
+_CONTEXT_TEMPLATE = (
+    "Contexto recuperado das minhas anotações do Obsidian "
+    "(use se for relevante):\n\n{context}\n\n---\nPergunta: {question}"
 )
 
 
 class ChatSession:
-    """Mantém o histórico de uma conversa e fala com o LLM."""
+    """Mantém o histórico de uma conversa, consulta o RAG e fala com o LLM."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, use_rag: bool = True) -> None:
         self._llm = get_llm()
+        self._use_rag = use_rag
         self._history: list = [SystemMessage(content=SYSTEM_PROMPT)]
+
+    def _retrieve_context(self, message: str) -> str:
+        """Busca trechos relevantes no RAG. Silencioso se indisponível."""
+        if not self._use_rag:
+            return ""
+        try:
+            from core.memory import query_memory
+
+            chunks = query_memory(message)
+        except Exception:
+            # Sem índice, sem embeddings ou chromadb ausente → chat normal.
+            return ""
+        return "\n\n".join(chunks)
 
     def send(self, message: str) -> str:
         """Envia uma mensagem do usuário e retorna a resposta do Jade."""
+        context = self._retrieve_context(message)
+
+        # O histórico guarda a mensagem original (limpa); o contexto do RAG é
+        # injetado apenas na chamada ao LLM, para não poluir a conversa.
         self._history.append(HumanMessage(content=message))
-        response = self._llm.invoke(self._history)
+        if context:
+            augmented = _CONTEXT_TEMPLATE.format(context=context, question=message)
+            prompt_messages = [*self._history[:-1], HumanMessage(content=augmented)]
+        else:
+            prompt_messages = self._history
+
+        response = self._llm.invoke(prompt_messages)
         text = response.content if hasattr(response, "content") else str(response)
         self._history.append(AIMessage(content=text))
         return text
