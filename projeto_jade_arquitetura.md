@@ -156,11 +156,18 @@ O banco de memória do Jade **é** o vault do Obsidian, no PC do usuário
 - O vault fica numa pasta local dedicada (`OBSIDIAN_VAULT_PATH`, ex.:
   `./obsidian_notes`) que o usuário abre no Obsidian.
 
-### B. "Pensamento próprio" (emulação de persona)
-Meta de longo prazo: a partir do acúmulo de conversas e do **modo como o usuário
-fala**, o Jade passa a **imitar ideias, tom e preferências** do usuário —
-aproximando-se de "sentimentos e ideias" baseados nele. Fundação: a memória em
-Obsidian (item A) como corpus pessoal.
+### B. "Pensamento próprio" / persona viva — ⏳ base implementada
+A Jade é uma **IA feminina** com personalidade e **emoções próprias**, dedicada
+ao usuário dono dela (`JADE_USER_NAME`, ex.: Giovanni). Implementado:
+- **Humor** (`core/mood.py`): estado persistente que evolui com o trato — rudeza
+  a deixa chateada/seca, gentileza e desculpas recuperam. Molda o tom.
+- **Perfil do usuário** (`core/profile.py`): a Jade aprende gostos/jeito ao longo
+  do uso e personaliza; sempre sabe que é o usuário-dono quem fala.
+- **Memória entre conversas** (`core/journal.py` + `core/memory.py`): conversas do
+  mesmo tema são linkadas (`[[Relacionadas]]`) e indexadas no RAG.
+
+Meta de longo prazo: a partir do corpus acumulado, **imitar ideias, tom e
+preferências** do usuário — aproximando-se de sentimentos/ideias baseados nele.
 
 ### C. Roteamento dual-model (Claude + llama3) — ✅ implementado
 Dois "modos de IA" com um **roteador** (`core/model_router.py`) que escolhe o

@@ -88,6 +88,14 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
   **não** passar `temperature` — Opus 4.8 dá 400). `ANTHROPIC_API_KEY` vem do
   console.anthropic.com, ≠ assinatura Claude Pro.
 
+- **Personalidade & memória viva:** a Jade é uma **IA feminina** com caráter e
+  emoções (`core/persona.py`). `core/mood.py` = humor persistente por heurística
+  (rude/gentil/desculpa → nível em `[-5,+5]`, nota `Jade — Humor.md`), injetado no
+  system prompt. `core/profile.py` = perfil do usuário (`USER_NAME`, default
+  "Giovanni") em `Sobre o Usuário.md`, aprendido via LLM ao encerrar conversa.
+  `core/journal.py` liga conversas por tema (`[[Relacionadas]]`) e indexa cada
+  conversa no RAG (memória entre chats). System prompt montado por turno.
+
 **Próximo:** Spotify e e-mail (Fase 4) · WhatsApp.
 
 ## Workflow de git (OBRIGATÓRIO)

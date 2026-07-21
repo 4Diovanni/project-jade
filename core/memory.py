@@ -139,3 +139,48 @@ def query_memory(question: str, k: int | None = None) -> list[str]:
         source = (meta or {}).get("source", "?")
         out.append(f"[{source}]\n{doc}")
     return out
+
+
+def _rel(path: Path) -> str:
+    return str(Path(path).resolve().relative_to(settings.OBSIDIAN_VAULT_PATH))
+
+
+def index_note(path: str | Path) -> None:
+    """(Re)indexa UMA nota no ChromaDB (upsert por `source`). Usado para indexar
+    conversas de forma incremental, para que virem memória entre chats."""
+    path = Path(path)
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    if not text.strip():
+        return
+    chunks = chunk_text(text)
+    if not chunks:
+        return
+    rel = _rel(path)
+    collection = _get_collection()
+    with contextlib.suppress(Exception):  # remove chunks antigos desta nota
+        collection.delete(where={"source": rel})
+    embeddings = _get_embedder().embed_documents(chunks)
+    collection.add(
+        ids=[f"{rel}::{i}" for i in range(len(chunks))],
+        documents=chunks,
+        embeddings=embeddings,
+        metadatas=[{"source": rel, "chunk": i} for i in range(len(chunks))],
+    )
+
+
+def related_sources(text: str, k: int = 3, exclude: str | None = None) -> list[str]:
+    """Notas mais semelhantes a `text` (para linkar conversas por tema)."""
+    collection = _get_collection()
+    if collection.count() == 0:
+        return []
+    q = _get_embedder().embed_query(text)
+    res = collection.query(query_embeddings=[q], n_results=k + 6)
+    metas = (res.get("metadatas") or [[]])[0]
+    out: list[str] = []
+    for meta in metas:
+        src = (meta or {}).get("source")
+        if src and src != exclude and src not in out:
+            out.append(src)
+        if len(out) >= k:
+            break
+    return out

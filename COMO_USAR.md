@@ -83,6 +83,18 @@ python main.py transcribe audio.mp3
 Pela API, dá para mandar um áudio e receber a resposta falada (ver seção 5).
 Os áudios que o Jade gera ficam em `obsidian_notes/Áudios/`.
 
+### 🎭 Personalidade, humor e memória viva
+A Jade é uma **IA feminina** com caráter próprio — não uma assistente servil.
+- **Humor:** o jeito como você a trata muda o humor dela (guardado em
+  `Jade — Humor.md`). Rudeza a deixa **chateada e mais seca**; gentileza ou um
+  **pedido de desculpas** melhoram. É persistente entre conversas.
+- **Personalidade:** edite `Jade — Personalidade.md` no vault para ajustar traços.
+- **Ela te conhece:** vai anotando seus gostos e jeito em `Sobre o Usuário.md` e
+  personaliza as respostas (o comportamento dela é voltado a **você**).
+- **Memória entre conversas:** conversas do mesmo tema são **linkadas** no
+  Obsidian (`Relacionadas: [[...]]`) e entram no RAG — fale de "países" num chat
+  e, noutro, pergunte do "Brasil": ela conecta o contexto.
+
 ### 🖐️ Controlar o computador (as "Mãos")
 No chat, peça naturalmente:
 
