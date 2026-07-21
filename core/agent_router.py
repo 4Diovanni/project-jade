@@ -1,30 +1,23 @@
-"""Roteador de agente: dado um comando, o LLM decide qual tool acionar.
+"""Roteador de agente: decide qual tool (se alguma) executa a mensagem.
 
-É o coração *agentic* do Jade (Fase 2). Monta o agente LangChain a partir das
-tools registradas em `tools/registry.py`.
+Abordagem **determinística e confiável**: em vez de depender do tool-calling
+nativo do LLM (instável no llama3), cada tool declara `trigger_hints` e valida
+via `accepts()` se sabe executar o comando. Se nenhuma aceitar, a mensagem
+segue para o chat normal (com RAG).
 
-Na Fase 1, o Jade apenas conversa — sem tools — via `core.chat.ChatSession`.
-Este módulo passa a ser usado quando as tools estiverem prontas (Fase 2+).
+É a base sobre a qual o futuro **roteador dual-model** (Claude p/ complexo,
+llama3 p/ simples) vai ser construído.
 """
 
 from __future__ import annotations
 
-from core.llm_engine import get_llm
+from tools.base import JadeTool
 from tools.registry import get_registered_tools
 
 
-def build_agent():
-    """Constrói o agente com function-calling sobre as tools registradas.
-
-    TODO (Fase 1/2): usar create_tool_calling_agent / AgentExecutor do LangChain
-    envolvendo `get_registered_tools()` e `get_llm()`.
-    """
-    llm = get_llm()  # noqa: F841 (usado quando o agente for implementado)
-    tools = get_registered_tools()  # noqa: F841
-    raise NotImplementedError("Fase 1: montar o AgentExecutor do LangChain.")
-
-
-def handle_message(message: str) -> str:
-    """Ponto único de entrada de uma mensagem do usuário → resposta do Jade."""
-    agent = build_agent()
-    return agent.invoke({"input": message})["output"]
+def route(message: str) -> JadeTool | None:
+    """Retorna a primeira tool que aceita a mensagem, ou None (→ conversa)."""
+    for tool in get_registered_tools():
+        if tool.accepts(message):
+            return tool
+    return None

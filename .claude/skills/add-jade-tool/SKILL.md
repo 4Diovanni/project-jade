@@ -28,6 +28,12 @@ Sempre que o usuário pedir uma capacidade nova ("faça o Jade tocar Spotify",
            "Toca música no Spotify. Use quando o usuário pedir para tocar, "
            "pausar ou pular uma música. Recebe o que tocar como texto."
        )
+       # Gatilhos que sinalizam que a mensagem PODE ser para esta tool.
+       trigger_hints = ("spotify", "toca", "tocar", "pausa", "pula a música")
+
+       def accepts(self, message: str) -> bool:
+           # (Opcional) refine para evitar falso positivo; padrão = trigger_hints.
+           return self.matches(message)
 
        def run(self, query: str) -> str:
            # Implementação real da habilidade (ex.: chamada ao Spotipy).
@@ -36,9 +42,12 @@ Sempre que o usuário pedir uma capacidade nova ("faça o Jade tocar Spotify",
    ```
 
    - `name`: identificador único, `snake_case`.
-   - `description`: escrita para o **LLM** ler e decidir acionar a tool — deixe
-     claro *quando* usá-la e *o que* recebe. É a parte mais importante.
-   - `run(self, query: str) -> str`: sempre retorna **texto** para o agente.
+   - `description`: em linguagem natural, deixa claro *quando* usar e *o que* recebe.
+   - `trigger_hints`: palavras que fazem o **roteador** (`core/agent_router.py`)
+     considerar esta tool. Sem gatilhos, a tool nunca é acionada pelo chat.
+   - `accepts(message)`: retorne `True` só quando a tool realmente souber executar
+     (evita falso positivo). Padrão = `matches` (bate os `trigger_hints`).
+   - `run(self, query: str) -> str`: sempre retorna **texto** para o usuário.
 
 3. **Registre em `tools/registry.py`**: importe a classe e adicione uma
    instância na lista `_TOOLS`.
