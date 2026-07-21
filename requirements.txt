@@ -9,11 +9,12 @@ langchain-ollama>=0.1        # provider local padrão (Ollama)
 # langchain-openai>=0.1
 # langchain-anthropic>=0.1
 
-# ── Fase 2: Memória / RAG do Obsidian (descomente na Fase 2) ──
-# langchain>=0.2
-# langchain-community>=0.2
-# chromadb>=0.5
-# sentence-transformers>=2.7    # embeddings locais (privacy-first)
+# ── Fase 2: Memória / RAG do Obsidian ────────────────────────
+chromadb>=0.5
+langchain-text-splitters>=0.2   # chunking das notas
+# Embeddings via Ollama (OllamaEmbeddings já vem em langchain-ollama, acima).
+# Alternativa local com PyTorch (não usada por padrão):
+# sentence-transformers>=2.7
 
 # ── Fase 3+: Sentidos e Mãos (descomente ao chegar na fase) ──
 # openai-whisper                # STT (voz -> texto)

@@ -40,16 +40,27 @@ Obsidian. Documento-fonte da arquitetura: `projeto_jade_arquitetura.md`.
 Pipeline em `.github/workflows/` + `.pre-commit-config.yaml`. Rode localmente:
 - `ruff check . && ruff format .` — lint + formatação (config em `pyproject.toml`).
 - `bandit -c pyproject.toml -r core tools interfaces main.py` — SAST.
-- `pip-audit -r requirements.txt` — vulnerabilidades de deps.
+- `pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-311` — vulnerabilidades de deps (a exceção é o CVE do servidor HTTP do ChromaDB, que não usamos; ver SECURITY.md).
 - `pytest` — testes de fumaça (não dependem do LLM/Ollama).
 
 Para swallow de exceção use `contextlib.suppress` (Bandit rejeita try/except/pass).
 Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-audit/gitleaks), `codeql.yml`.
 
 ## Estado atual
-**Fase 1 concluída:** LLM real conectado (`core/llm_engine.py`), motor de
-conversa com persona e histórico (`core/chat.py`), CLI (`python main.py chat`)
-e endpoints `/chat` `/reset` `/health`. Sem tools ainda — chat puro.
-Para rodar de verdade: Ollama instalado + `ollama pull llama3` (ou provider de
-nuvem com chave no `.env`). **Próximo:** Fase 2 (ChromaDB + RAG do Obsidian +
-roteamento agentic em `core/agent_router.py`).
+**Fases 1 e 2 concluídas.**
+- Fase 1: LLM (`core/llm_engine.py`), chat com persona+histórico (`core/chat.py`),
+  CLI e endpoints `/chat` `/reset` `/health`.
+- Fase 2 (RAG do Obsidian): `core/memory.py` indexa o vault no **ChromaDB** com
+  **embeddings via Ollama** (`nomic-embed-text`, sem PyTorch); `ChatSession`
+  injeta os trechos recuperados (RAG-augmented chat, com fallback p/ chat puro).
+  Comandos: `python main.py index` e endpoints `/index` `/search`.
+- Requer Ollama + `ollama pull llama3` + `ollama pull nomic-embed-text`.
+- **Decisão de design:** agente multi-tool (`core/agent_router.py`) fica para a
+  Fase 4 (llama3 não faz tool-calling confiável); Fase 2 usa RAG direto no chat.
+
+**Próximo:** Fase 3 (WhatsApp + voz).
+
+## Workflow de git (OBRIGATÓRIO)
+Nunca commitar direto na `main` (branch protection ativa). Toda mudança: criar
+branch (`feat/…`) → commit → `git push -u origin <branch>` → `gh pr create` →
+CI/Security/CodeQL verdes → `gh pr merge`.
