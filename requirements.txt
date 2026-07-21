@@ -16,9 +16,14 @@ langchain-text-splitters>=0.2   # chunking das notas
 # Alternativa local com PyTorch (não usada por padrão):
 # sentence-transformers>=2.7
 
-# ── Fase 3+: Sentidos e Mãos (descomente ao chegar na fase) ──
-# openai-whisper                # STT (voz -> texto)
-# edge-tts                      # TTS local
+# ── Fase 3: Voz (Os Sentidos) ────────────────────────────────
+faster-whisper>=1.0          # STT local (voz -> texto), sem PyTorch
+edge-tts>=6.1                # TTS online (vozes pt-BR de alta qualidade)
+python-multipart>=0.0.9      # upload de áudio na API
+# pyttsx3>=2.90              # TTS 100% offline (opcional)
+
+# ── Fase 3+/4: Mãos (descomente ao chegar na fase) ───────────
 # spotipy                       # módulo Spotify
 # pyautogui                     # controle do SO
 # google-api-python-client      # Gmail / Calendar
+# whatsapp: serviço Node separado (interfaces/whatsapp_bot/) — fase futura

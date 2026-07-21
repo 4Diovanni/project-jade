@@ -21,6 +21,8 @@ ignore = ["E501"]  # comprimento de linha é responsabilidade do formatter
 [tool.ruff.lint.per-file-ignores]
 # main.py reconfigura o stdout ANTES dos imports (necessário no Windows).
 "main.py" = ["E402"]
+# FastAPI usa `= File(...)`/`= Depends(...)` como default (padrão do framework).
+"interfaces/api.py" = ["B008"]
 
 # ─────────────────────────────────────────────────────────────
 # Bandit — análise estática de segurança (SAST)
