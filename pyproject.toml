@@ -11,7 +11,8 @@ readme = "README.md"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["database", ".venv"]
+# .claude = skills/config do Claude Code (docs, não código-fonte do projeto).
+extend-exclude = ["database", ".venv", ".claude"]
 
 [tool.ruff.lint]
 # E/W pycodestyle · F pyflakes · I isort · UP pyupgrade · B bugbear

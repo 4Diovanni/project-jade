@@ -20,9 +20,9 @@ def test_health_ok():
     assert body["provider"] == settings.LLM_PROVIDER
 
 
-def test_obsidian_tool_registrada():
+def test_system_tool_registrada():
     names = [tool.name for tool in get_registered_tools()]
-    assert "obsidian_search" in names
+    assert "system_control" in names
 
 
 def test_config_tem_defaults():
