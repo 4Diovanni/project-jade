@@ -6,12 +6,31 @@ export function createVoice({ store, orb, chat, audioEl }) {
   let chunks = [];
   let stream = null;
   let recording = false;
+  let starting = false;
+  let cancelRequested = false;
 
   async function start() {
-    if (recording || store.get().busy) return;
+    if (recording || starting || store.get().busy) return;
+    starting = true;
+    cancelRequested = false;
+    let s;
+    try {
+      s = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      starting = false;
+      orb.setState("idle");
+      chat.addBubble("error", "Preciso de permissão do microfone para te ouvir.");
+      return;
+    }
+    starting = false;
+    if (cancelRequested) {
+      // soltou o botão antes do mic liberar: não grava e fecha o stream.
+      for (const track of s.getTracks()) track.stop();
+      return;
+    }
+    stream = s;
     recording = true;
     btn.classList.add("recording");
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     orb.connectMic(stream);
     orb.setState("listening");
     chunks = [];
@@ -21,6 +40,7 @@ export function createVoice({ store, orb, chat, audioEl }) {
   }
 
   async function stop() {
+    if (starting) { cancelRequested = true; return; }
     if (!recording) return;
     recording = false;
     btn.classList.remove("recording");
@@ -61,7 +81,7 @@ export function createVoice({ store, orb, chat, audioEl }) {
     btn.addEventListener("touchend", (e) => { e.preventDefault(); stop(); });
     // Atalho: segurar espaço (fora do campo de texto).
     window.addEventListener("keydown", (e) => {
-      if (e.code === "Space" && e.target.tagName !== "INPUT" && !recording) {
+      if (e.code === "Space" && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName) && !e.target.isContentEditable && !recording && !starting) {
         e.preventDefault();
         start();
       }
