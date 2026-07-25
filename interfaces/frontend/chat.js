@@ -20,7 +20,7 @@ export function createChat({ store, orb, audioEl }) {
   }
 
   async function speak(text) {
-    if (store.get().muted) return;
+    if (store.get().muted) { orb.setState("idle"); return; }
     try {
       const url = await ttsUrl(text);
       audioEl.src = url;
@@ -44,6 +44,7 @@ export function createChat({ store, orb, audioEl }) {
       store.set({ busy: false });
       await speak(reply);
     } catch (e) {
+      console.error(e);
       addBubble("error", "Jade indisponível no momento.");
       store.set({ busy: false });
       orb.setState("idle");
