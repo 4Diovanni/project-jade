@@ -10,8 +10,16 @@ async function jsonPost(path, body) {
 }
 
 export const sendMessage = (message) => jsonPost("/chat", { message });
-export const reset = () => fetch("/reset", { method: "POST" }).then(() => undefined);
-export const listConversations = () => fetch("/conversations").then((r) => r.json());
+export const reset = () =>
+  fetch("/reset", { method: "POST" }).then((r) => {
+    if (!r.ok) throw new Error(`/reset → ${r.status}`);
+    return undefined;
+  });
+export const listConversations = () =>
+  fetch("/conversations").then((r) => {
+    if (!r.ok) throw new Error(`/conversations → ${r.status}`);
+    return r.json();
+  });
 export const getConversation = (id) =>
   fetch(`/conversations/${encodeURIComponent(id)}`).then((r) => {
     if (!r.ok) throw new Error(`/conversations/${id} → ${r.status}`);
