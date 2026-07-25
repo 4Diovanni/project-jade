@@ -1,0 +1,42 @@
+:root {
+  --jade: #00bb77;
+  --jade-spring: #00ff7f;
+  --jade-emerald: #00674f;
+  --bg: #0a0f0d;
+  --panel: #0f1512;
+  --text: #d8f5e6;
+  --muted: #6f8a7e;
+}
+* { box-sizing: border-box; }
+body { margin: 0; height: 100vh; background: var(--bg); color: var(--text);
+  font-family: system-ui, sans-serif; }
+.layout { display: grid; grid-template-columns: 18% 52% 30%; height: 100vh; }
+.threads, .jade { background: var(--panel); border-left: 1px solid #16211c;
+  border-right: 1px solid #16211c; padding: 12px; overflow-y: auto; }
+.new-chat { width: 100%; padding: 8px; background: transparent; color: var(--jade-spring);
+  border: 1px solid var(--jade-emerald); border-radius: 8px; cursor: pointer; }
+.threads-list { list-style: none; padding: 0; margin: 12px 0 0; }
+.threads-list li { padding: 8px; border-radius: 6px; cursor: pointer; color: var(--muted);
+  font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.threads-list li:hover, .threads-list li.active { background: #14201b; color: var(--text); }
+.chat { display: flex; flex-direction: column; min-width: 0; }
+.messages { flex: 1; overflow-y: auto; padding: 20px; display: flex;
+  flex-direction: column; gap: 12px; }
+.bubble { max-width: 80%; padding: 10px 14px; border-radius: 12px; line-height: 1.4;
+  white-space: pre-wrap; word-wrap: break-word; }
+.bubble.user { align-self: flex-end; background: var(--jade-emerald); color: #eafff5; }
+.bubble.jade { align-self: flex-start; background: #14201b; }
+.bubble.error { align-self: flex-start; background: #3a1414; color: #ffd9d9; }
+.badge { font-size: 11px; color: var(--muted); margin-top: 4px; align-self: flex-start; }
+.composer { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #16211c; }
+.composer-input { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #22332b;
+  background: #0c1210; color: var(--text); }
+.composer-input:disabled { opacity: 0.5; }
+.mic-btn, .send-btn, .mute-btn { padding: 10px 14px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--jade-emerald); background: transparent; color: var(--text); }
+.mic-btn.recording { background: var(--jade); color: #04120c; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+.jade { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px; }
+.orb-canvas { width: 100%; max-width: 320px; aspect-ratio: 1; }
+.orb-status { color: var(--jade-spring); letter-spacing: 1px; text-transform: lowercase; }
