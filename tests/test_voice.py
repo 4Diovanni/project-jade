@@ -33,3 +33,38 @@ def test_output_path_forca_extensao_correta():
 def test_audio_output_dir_configurado():
     assert settings.AUDIO_OUTPUT_DIR
     assert settings.AUDIO_OUTPUT_DIR.name  # tem um nome de pasta
+
+
+def test_synthesize_edge_dentro_de_event_loop(monkeypatch, tmp_path):
+    """Regressão: /voice/chat é um endpoint async, então _synthesize_edge roda
+    DENTRO de um event loop. asyncio.run() ali levantava RuntimeError e devolvia
+    503. O TTS precisa funcionar mesmo com um loop já em execução."""
+    import asyncio
+    import sys
+    import types
+    from pathlib import Path
+
+    saved: dict = {}
+
+    class _FakeCommunicate:
+        def __init__(self, text, voice):
+            saved["text"] = text
+
+        async def save(self, path):
+            Path(path).write_bytes(b"fake-mp3")
+            saved["path"] = path
+
+    monkeypatch.setitem(
+        sys.modules, "edge_tts", types.SimpleNamespace(Communicate=_FakeCommunicate)
+    )
+    out = tmp_path / "fala.mp3"
+
+    async def _dentro_do_loop():
+        # Simula o /voice/chat: chamada síncrona de dentro de um loop rodando.
+        voice_service._synthesize_edge("olá", out, "pt-BR-FranciscaNeural")
+
+    asyncio.run(_dentro_do_loop())
+
+    assert out.exists()
+    assert saved.get("text") == "olá"
+    assert saved.get("path") == str(out)
