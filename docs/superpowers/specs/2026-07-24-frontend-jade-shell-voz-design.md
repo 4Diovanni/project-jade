@@ -129,7 +129,7 @@ Grid CSS de 3 zonas (proporções ajustáveis):
 
 Esquerda (~70%) reúne a lista de threads + a conversa atual. Direita (~30%) é a
 presença da Jade (orb + rótulo de estado + botão de mudo). Tema escuro, brilho
-ciano/teal. A lista de threads pode ser recolhível para dar mais espaço ao chat.
+verdeJade(#00BB77), verdePrimavera(#00FF7F), verdeEsmeralda(#00674F). A lista de threads pode ser recolhível para dar mais espaço ao chat.
 
 ## Fluxos de dados
 
