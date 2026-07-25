@@ -3,6 +3,7 @@ import { modelBadge } from "./lib/format.js";
 
 export function createChat({ store, orb, audioEl }) {
   const list = document.getElementById("messages");
+  let lastTtsUrl = null;
 
   function addBubble(role, text, model) {
     const div = document.createElement("div");
@@ -23,6 +24,8 @@ export function createChat({ store, orb, audioEl }) {
     if (store.get().muted) { orb.setState("idle"); return; }
     try {
       const url = await ttsUrl(text);
+      if (lastTtsUrl) URL.revokeObjectURL(lastTtsUrl);
+      lastTtsUrl = url;
       audioEl.src = url;
       orb.connectAudio(audioEl);
       orb.setState("speaking");

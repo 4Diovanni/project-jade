@@ -191,7 +191,8 @@ async def voice_chat(file: UploadFile = File(...)) -> dict:
     tmp = _save_upload(file)
     try:
         transcription = transcribe(tmp)
-        reply = _get_session().send(transcription)
+        session = _get_session()
+        reply = session.send(transcription)
         audio_path = synthesize_reply(reply)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Falha no voice chat: {e}") from e
@@ -202,6 +203,7 @@ async def voice_chat(file: UploadFile = File(...)) -> dict:
         "reply": reply,
         "audio_file": str(audio_path),
         "audio_url": f"/voice/audio/{audio_path.name}",
+        "model": session.last_model,
     }
 
 

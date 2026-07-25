@@ -53,9 +53,9 @@ export function createVoice({ store, orb, chat, audioEl }) {
     store.set({ busy: true });
     orb.setState("thinking");
     try {
-      const { transcription, reply, audio_url } = await voiceChat(blob);
+      const { transcription, reply, audio_url, model } = await voiceChat(blob);
       chat.addBubble("user", transcription);
-      chat.addBubble("jade", reply);
+      chat.addBubble("jade", reply, model);
       store.set({ busy: false });
       if (!store.get().muted && audio_url) {
         audioEl.src = audio_url;
@@ -66,7 +66,8 @@ export function createVoice({ store, orb, chat, audioEl }) {
       } else {
         orb.setState("idle");
       }
-    } catch {
+    } catch (e) {
+      console.error(e);
       chat.addBubble("error", "Não consegui te ouvir agora.");
       store.set({ busy: false });
       orb.setState("idle");

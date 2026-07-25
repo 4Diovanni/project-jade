@@ -46,6 +46,7 @@ document.getElementById("new-chat").addEventListener("click", async () => {
 muteBtn.addEventListener("click", () => {
   const muted = !store.get().muted;
   store.set({ muted });
+  if (muted) audioEl.pause();
   muteBtn.textContent = muted ? "🔇" : "🔊";
   muteBtn.setAttribute("aria-pressed", String(muted));
 });
