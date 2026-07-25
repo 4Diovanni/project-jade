@@ -9,8 +9,9 @@ permissions:
   contents: read
 
 jobs:
-  lint-test:
-    name: Lint & Test
+  # Lint/format independem da versão de Python → rodam uma vez só.
+  lint:
+    name: Lint & Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,14 +21,39 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Instalar dependências
-        run: pip install -r requirements-dev.txt
+      - name: Instalar ruff
+        run: pip install ruff
 
       - name: Ruff (lint)
         run: ruff check .
 
       - name: Ruff (format)
         run: ruff format --check .
+
+  # Testes de fumaça em cada versão suportada (CLAUDE.md: Python 3.11+).
+  test:
+    name: Test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # não cancela as outras versões se uma falhar
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+        include:
+          # 3.14 é a versão usada no dev; roda como "best-effort" porque algumas
+          # deps (chromadb, faster-whisper) podem ainda não ter wheel no Linux.
+          - python-version: "3.14"
+            experimental: true
+    continue-on-error: ${{ matrix.experimental == true }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Instalar dependências
+        run: pip install -r requirements-dev.txt
 
       - name: Testes
         run: pytest
