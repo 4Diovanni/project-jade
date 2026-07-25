@@ -1,5 +1,6 @@
 import { sendMessage, ttsUrl } from "./api.js";
 import { modelBadge } from "./lib/format.js";
+import { renderMarkdown } from "./lib/markdown.js";
 
 export function createChat({ store, orb, audioEl }) {
   const list = document.getElementById("messages");
@@ -8,7 +9,13 @@ export function createChat({ store, orb, audioEl }) {
   function addBubble(role, text, model) {
     const div = document.createElement("div");
     div.className = `bubble ${role}`;
-    div.textContent = text;
+    // Respostas da Jade vêm em Markdown (renderizado, com HTML escapado);
+    // mensagens do usuário e erros ficam como texto plano.
+    if (role === "jade") {
+      div.innerHTML = renderMarkdown(text);
+    } else {
+      div.textContent = text;
+    }
     list.appendChild(div);
     if (role === "jade" && modelBadge(model)) {
       const b = document.createElement("div");
