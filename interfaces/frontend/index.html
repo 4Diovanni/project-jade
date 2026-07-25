@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jade</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="layout">
+    <aside class="threads" aria-label="Conversas">
+      <button id="new-chat" class="new-chat">+ Novo</button>
+      <ul id="threads-list" class="threads-list"></ul>
+    </aside>
+
+    <section class="chat">
+      <div id="messages" class="messages" aria-live="polite"></div>
+      <form id="composer" class="composer" autocomplete="off">
+        <input id="composer-input" class="composer-input" type="text"
+               placeholder="Fale com a Jade…" />
+        <button id="mic-btn" class="mic-btn" type="button" title="Segure para falar">🎤</button>
+        <button id="send-btn" class="send-btn" type="submit">Enviar</button>
+      </form>
+    </section>
+
+    <aside class="jade" aria-label="Jade">
+      <canvas id="orb-canvas" class="orb-canvas" width="360" height="360"></canvas>
+      <div id="orb-status" class="orb-status">ociosa</div>
+      <button id="mute-btn" class="mute-btn" type="button" aria-pressed="false">🔊</button>
+    </aside>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

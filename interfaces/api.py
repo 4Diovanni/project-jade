@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from core.chat import ChatSession
 from core.config import settings
+from core.journal import parse_conversation_note
 
 app = FastAPI(title="Project Jade", version="0.1.0")
 
@@ -82,6 +85,59 @@ def search(req: SearchRequest) -> dict:
     return {"results": results}
 
 
+FRONTEND_DIR = Path(__file__).parent / "frontend"
+
+_FM_FIELD = {key: re.compile(rf'(?m)^{key}:\s*"?(.*?)"?\s*$') for key in ("title", "data")}
+
+
+def _frontmatter_field(text: str, key: str) -> str:
+    m = _FM_FIELD[key].search(text)
+    return m.group(1).strip() if m else ""
+
+
+def _conversations_dir() -> Path:
+    return settings.OBSIDIAN_VAULT_PATH / settings.CONVERSATIONS_SUBDIR
+
+
+@app.get("/conversations")
+def list_conversations() -> list[dict]:
+    """Lista as conversas salvas (notas .md), mais recente primeiro."""
+    folder = _conversations_dir()
+    if not folder.is_dir():
+        return []
+    items: list[dict] = []
+    for md in sorted(folder.glob("*.md"), key=lambda p: p.name, reverse=True):
+        text = md.read_text(encoding="utf-8", errors="ignore")
+        items.append(
+            {
+                "id": md.stem,
+                "title": _frontmatter_field(text, "title") or md.stem,
+                "date": _frontmatter_field(text, "data"),
+            }
+        )
+    return items
+
+
+@app.get("/conversations/{conv_id}")
+def get_conversation(conv_id: str) -> dict:
+    """Retorna uma conversa parseada (só leitura)."""
+    safe = Path(conv_id).name  # anti path-traversal
+    path = _conversations_dir() / f"{safe}.md"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Conversa não encontrada.")
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    return {
+        "title": _frontmatter_field(text, "title") or safe,
+        "date": _frontmatter_field(text, "data"),
+        "turns": parse_conversation_note(text),
+    }
+
+
+@app.get("/")
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/app/")
+
+
 # ── Voz (Fase 3) ─────────────────────────────────────────────
 def _save_upload(file: UploadFile) -> Path:
     """Salva o áudio recebido num arquivo temporário e retorna o caminho."""
@@ -135,7 +191,8 @@ async def voice_chat(file: UploadFile = File(...)) -> dict:
     tmp = _save_upload(file)
     try:
         transcription = transcribe(tmp)
-        reply = _get_session().send(transcription)
+        session = _get_session()
+        reply = session.send(transcription)
         audio_path = synthesize_reply(reply)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Falha no voice chat: {e}") from e
@@ -146,6 +203,7 @@ async def voice_chat(file: UploadFile = File(...)) -> dict:
         "reply": reply,
         "audio_file": str(audio_path),
         "audio_url": f"/voice/audio/{audio_path.name}",
+        "model": session.last_model,
     }
 
 
@@ -157,3 +215,7 @@ def voice_audio(name: str) -> FileResponse:
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Áudio não encontrado.")
     return FileResponse(path, media_type="audio/mpeg", filename=safe)
+
+
+FRONTEND_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/app", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

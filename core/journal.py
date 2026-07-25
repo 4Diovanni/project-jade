@@ -16,9 +16,33 @@ from datetime import datetime
 from pathlib import Path
 
 from core.config import settings
+from core.notes import strip_frontmatter
 
 _MOC_NOTE = "Jade — Memória.md"
 _INVALID_FS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_TURN_RE = re.compile(
+    r"\*\*(Você|Jade):\*\*\s*(.*?)(?=\n\*\*(?:Você|Jade):\*\*|\Z)",
+    re.DOTALL,
+)
+
+
+def parse_conversation_note(text: str) -> list[dict[str, str]]:
+    """Extrai os turnos (pergunta/resposta) do corpo de uma nota de conversa.
+
+    Lê o formato gerado por `ConversationJournal._render` (blocos
+    `**Você:** …` / `**Jade:** …`). Ignora frontmatter e cabeçalho. Um turno é
+    um par Você→Jade; um 'Você' sem 'Jade' seguinte é descartado."""
+    body = strip_frontmatter(text)
+    turns: list[dict[str, str]] = []
+    pending_user: str | None = None
+    for role, content in _TURN_RE.findall(body):
+        content = content.strip()
+        if role == "Você":
+            pending_user = content
+        elif pending_user is not None:
+            turns.append({"user": pending_user, "jade": content})
+            pending_user = None
+    return turns
 
 
 def _first_line(text: str) -> str:
