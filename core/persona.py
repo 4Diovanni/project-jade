@@ -49,7 +49,7 @@ _RAG_HINT = (
 
 def load_personality() -> str:
     """Corpo da nota de personalidade (cria um template na primeira vez)."""
-    path = settings.OBSIDIAN_VAULT_PATH / settings.PERSONALITY_NOTE
+    path = settings.NOTES_DIR / settings.PERSONALITY_NOTE
     if not path.exists():
         with contextlib.suppress(Exception):
             path.parent.mkdir(parents=True, exist_ok=True)

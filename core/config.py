@@ -54,8 +54,15 @@ class Settings:
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
     # ── Obsidian ──
+    # Raiz do que a Jade LÊ (RAG). Apontar para a raiz do repo faz ela enxergar
+    # os documentos do próprio projeto (arquitetura, README) além das notas.
     OBSIDIAN_VAULT_PATH: Path = _resolve_path(os.getenv("OBSIDIAN_VAULT_PATH", ""), BASE_DIR)
-    # Subpasta do vault onde as conversas com o Jade viram notas .md.
+    # Onde a Jade ESCREVE (conversas, notas internas, áudios). Fica separado do
+    # vault de leitura de propósito: com o vault na raiz do repo, escrever ali
+    # jogaria conversas pessoais dentro do git. `obsidian_notes/` é gitignorado.
+    # Default = o próprio vault, para não mudar o comportamento de quem não seta.
+    NOTES_DIR: Path = _resolve_path(os.getenv("JADE_NOTES_DIR", ""), OBSIDIAN_VAULT_PATH)
+    # Subpasta de NOTES_DIR onde as conversas com o Jade viram notas .md.
     CONVERSATIONS_SUBDIR: str = os.getenv("JADE_CONVERSATIONS_SUBDIR", "Conversas")
     # Persistir cada conversa em Markdown no vault (memória de longo prazo).
     JOURNAL_ENABLED: bool = os.getenv("JADE_JOURNAL_ENABLED", "true").strip().lower() != "false"
@@ -81,9 +88,7 @@ class Settings:
     TTS_VOICE: str = os.getenv("JADE_TTS_VOICE", "pt-BR-FranciscaNeural")
     # Onde os áudios gerados pelo Jade são salvos (padrão: subpasta do vault,
     # visível no Obsidian). São .mp3 (backend edge) consumíveis por ele e por você.
-    AUDIO_OUTPUT_DIR: Path = _resolve_path(
-        os.getenv("JADE_AUDIO_DIR", ""), OBSIDIAN_VAULT_PATH / "Áudios"
-    )
+    AUDIO_OUTPUT_DIR: Path = _resolve_path(os.getenv("JADE_AUDIO_DIR", ""), NOTES_DIR / "Áudios")
 
     # ── Tools / Mãos (Fase 4) ──
     # Liga/desliga o controle do sistema operacional (abrir apps, volume...).
@@ -116,15 +121,43 @@ class Settings:
     API_PORT: int = int(os.getenv("JADE_API_PORT", "8000"))
 
     # Pastas/arquivos do vault que NUNCA devem ser indexados no RAG.
+    # Comparado contra CADA parte do caminho relativo, então serve tanto para
+    # pastas quanto para nomes de arquivo soltos.
     VAULT_IGNORE: set[str] = {
+        # Infra do Obsidian / do agente
         ".obsidian",
         ".claude",
+        ".github",
+        # Controle de versão e ambientes
         ".git",
-        "database",
-        "__pycache__",
         ".venv",
         "venv",
         "node_modules",
+        "__pycache__",
+        # Caches de ferramentas (geram .md/.txt de relatório que viram ruído)
+        ".pytest_cache",
+        ".ruff_cache",
+        ".mypy_cache",
+        "htmlcov",
+        "dist",
+        "build",
+        # Dados gerados em runtime
+        "database",
+        # Pastas de código: os .md que vivem nelas são doc técnica de módulo,
+        # não conhecimento que a Jade precise ter na ponta da língua.
+        "core",
+        "tools",
+        "interfaces",
+        "tests",
+        "scripts",
+        # Planos e specs de implementação (artefatos de processo). São longos e
+        # sozinhos chegaram a 31% do índice, competindo com o resto. A Jade
+        # conhece o projeto por README/CLAUDE/arquitetura, que ficam na raiz.
+        # Tire daqui se quiser que ela leia o histórico de implementação.
+        "docs",
+        # Manifestos de dependência: texto sem valor semântico para a Jade
+        "requirements.txt",
+        "requirements-dev.txt",
     }
 
 

@@ -96,7 +96,7 @@ def _frontmatter_field(text: str, key: str) -> str:
 
 
 def _conversations_dir() -> Path:
-    return settings.OBSIDIAN_VAULT_PATH / settings.CONVERSATIONS_SUBDIR
+    return settings.NOTES_DIR / settings.CONVERSATIONS_SUBDIR
 
 
 @app.get("/conversations")

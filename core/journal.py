@@ -67,7 +67,9 @@ class ConversationJournal:
     """Registra uma sessão de conversa numa nota Markdown do vault do Obsidian."""
 
     def __init__(self, vault: Path | None = None, when: datetime | None = None) -> None:
-        self._vault = vault or settings.OBSIDIAN_VAULT_PATH
+        # Notas são ESCRITAS em NOTES_DIR (gitignorado), não na raiz do vault
+        # de leitura — que pode ser a raiz do repositório.
+        self._vault = vault or settings.NOTES_DIR
         self._started = when or datetime.now()
         self._title: str | None = None
         self._turns: list[tuple[str, str]] = []
@@ -98,18 +100,24 @@ class ConversationJournal:
     # ── internos ──
     def _find_related(self, seed: str) -> list[str]:
         """Conversas passadas mais parecidas (por tema) — best-effort."""
-        if self._vault != settings.OBSIDIAN_VAULT_PATH:
+        if self._vault != settings.NOTES_DIR:
             return []  # vault de teste: não toca no RAG real
         with contextlib.suppress(Exception):
             from core.memory import related_sources
 
-            exclude = str(self._path.relative_to(self._vault)) if self._path else None
+            # `exclude` é casado contra o `source` do RAG, que é relativo ao
+            # vault de LEITURA — não ao diretório de notas.
+            exclude = (
+                str(self._path.resolve().relative_to(settings.OBSIDIAN_VAULT_PATH))
+                if self._path
+                else None
+            )
             return related_sources(seed, k=3, exclude=exclude)
         return []
 
     def _index_self(self) -> None:
         """Indexa esta conversa no RAG para virar memória entre chats — best-effort."""
-        if self._vault != settings.OBSIDIAN_VAULT_PATH:
+        if self._vault != settings.NOTES_DIR:
             return
         with contextlib.suppress(Exception):
             from core.memory import index_note

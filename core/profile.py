@@ -14,7 +14,7 @@ from core.notes import read_body
 
 
 def _path() -> Path:
-    return settings.OBSIDIAN_VAULT_PATH / settings.PROFILE_NOTE
+    return settings.NOTES_DIR / settings.PROFILE_NOTE
 
 
 def ensure_profile() -> None:

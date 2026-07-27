@@ -55,6 +55,7 @@ def _write_note(tmp_path, name, title, date, body):
 
 def test_list_and_get_conversations(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "OBSIDIAN_VAULT_PATH", tmp_path)
+    monkeypatch.setattr(settings, "NOTES_DIR", tmp_path)  # onde as notas são escritas
     _write_note(
         tmp_path,
         "2026-07-20_100000 — antiga.md",
@@ -78,12 +79,14 @@ def test_list_and_get_conversations(tmp_path, monkeypatch):
 
 def test_get_conversation_inexistente_404(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "OBSIDIAN_VAULT_PATH", tmp_path)
+    monkeypatch.setattr(settings, "NOTES_DIR", tmp_path)  # onde as notas são escritas
     (tmp_path / settings.CONVERSATIONS_SUBDIR).mkdir(parents=True, exist_ok=True)
     assert TestClient(app).get("/conversations/nao_existe").status_code == 404
 
 
 def test_get_conversation_bloqueia_path_traversal(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "OBSIDIAN_VAULT_PATH", tmp_path)
+    monkeypatch.setattr(settings, "NOTES_DIR", tmp_path)  # onde as notas são escritas
     (tmp_path / settings.CONVERSATIONS_SUBDIR).mkdir(parents=True, exist_ok=True)
     # '../../secret' deve ser sanitizado para o basename e resultar em 404.
     assert TestClient(app).get("/conversations/..%2f..%2fsecret").status_code in (404, 400)

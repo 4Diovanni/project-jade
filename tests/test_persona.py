@@ -27,6 +27,7 @@ def test_mood_instruction_chateada_pede_secura():
 
 def test_mood_register_persiste_e_recupera(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "OBSIDIAN_VAULT_PATH", tmp_path)
+    monkeypatch.setattr(settings, "NOTES_DIR", tmp_path)  # onde as notas são escritas
     baixo, _ = mood.register("você é inútil")
     assert baixo < 0
     recuperado, _ = mood.register("desculpa, foi mal")
@@ -36,6 +37,7 @@ def test_mood_register_persiste_e_recupera(tmp_path, monkeypatch):
 
 def test_persona_inclui_usuario_humor_e_perfil(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "OBSIDIAN_VAULT_PATH", tmp_path)
+    monkeypatch.setattr(settings, "NOTES_DIR", tmp_path)  # onde as notas são escritas
     p = persona.build_system_prompt(mood_level=-4, profile_text="- Gosta de café")
     assert settings.USER_NAME in p
     assert "café" in p
@@ -44,6 +46,7 @@ def test_persona_inclui_usuario_humor_e_perfil(tmp_path, monkeypatch):
 
 def test_profile_add_facts_dedup(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "OBSIDIAN_VAULT_PATH", tmp_path)
+    monkeypatch.setattr(settings, "NOTES_DIR", tmp_path)  # onde as notas são escritas
     assert profile.add_facts(["Gosta de café", "Programa em Python"]) == 2
     assert profile.add_facts(["gosta de café"]) == 0  # duplicado (case-insensitive)
     assert "Python" in profile.load_profile()
