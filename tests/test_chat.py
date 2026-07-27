@@ -1,7 +1,7 @@
 """Testes do orquestrador de conversa (core.chat.ChatSession).
 
 O `send()` costura humor → tool → RAG → escolha de modelo. Estes testes cobrem
-os três ramos de resposta (tool, llama3 local, Claude nuvem) com LLM e tools
+os três ramos de resposta (tool, modelo local, Claude nuvem) com LLM e tools
 **mockados** — sem Ollama, sem rede e sem escrever no vault (CI-safe).
 """
 
@@ -76,7 +76,7 @@ def test_send_tool_que_falha_nao_derruba_a_sessao(monkeypatch):
     assert sess.last_model == "tool"
 
 
-# ── Ramo 2: modelo local (llama3) ──
+# ── Ramo 2: modelo local (Qwen3) ──
 def test_send_conversa_usa_modelo_local(monkeypatch):
     monkeypatch.setattr(chat_mod, "route", lambda message: None)
     # Sem chave/nuvem disponível → fica local.
@@ -86,7 +86,7 @@ def test_send_conversa_usa_modelo_local(monkeypatch):
     out = sess.send("oi jade, tudo bem?")
 
     assert out == "resposta do modelo"
-    assert sess.last_model == "llama3"
+    assert sess.last_model == "local"
 
 
 def test_send_sem_tools_vai_direto_ao_modelo(monkeypatch):
@@ -96,7 +96,7 @@ def test_send_sem_tools_vai_direto_ao_modelo(monkeypatch):
     out = sess.send("qualquer coisa")
 
     assert out == "resposta do modelo"
-    assert sess.last_model == "llama3"
+    assert sess.last_model == "local"
 
 
 # ── Ramo 3: modelo nuvem (Claude) ──

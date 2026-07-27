@@ -4,7 +4,7 @@ import { modelBadge } from "../lib/format.js";
 
 test("mapeia os modelos conhecidos", () => {
   assert.equal(modelBadge("claude"), "☁️ Claude");
-  assert.equal(modelBadge("llama3"), "local");
+  assert.equal(modelBadge("local"), "local");
   assert.equal(modelBadge("tool"), "ação");
 });
 
