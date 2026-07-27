@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
@@ -18,6 +19,7 @@ from core.config import settings
 from core.journal import parse_conversation_note
 
 app = FastAPI(title="Project Jade", version="0.1.0")
+logger = logging.getLogger(__name__)
 
 # Fase 1: uma única sessão de conversa (assistente pessoal = 1 usuário local).
 # A sessão é criada de forma preguiçosa para a API subir mesmo sem o LLM pronto.
@@ -46,7 +48,10 @@ def chat(req: ChatRequest, background: BackgroundTasks) -> dict:
     try:
         reply = session.send(req.message)
     except Exception as e:  # provider fora do ar, chave faltando, etc.
-        raise HTTPException(status_code=503, detail=f"Jade indisponível: {e}") from e
+        # O detalhe do erro vai para o log do servidor, não para o cliente
+        # (evita expor stack trace/implementação na resposta HTTP).
+        logger.exception("Falha ao responder no /chat")
+        raise HTTPException(status_code=503, detail="Jade indisponível no momento.") from e
     # Resume o assunto num título — depois de responder, para não atrasar o chat.
     task = session.title_task()
     if task is not None:

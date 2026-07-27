@@ -58,16 +58,36 @@ def _title_from(message: str, max_len: int = 60) -> str:
 
 
 # ── Título da conversa (gerado por contexto / editável) ──────
-_TITLE_RE = re.compile(r"(?m)^title:\s*.*$")
-_CUSTOM_RE = re.compile(r"(?m)^title_custom:\s*(true|false)\s*$")
-_HEADING_RE = re.compile(r"(?m)^#\s+.*$")
-# Modelos "de raciocínio" (ex.: qwen3) podem emitir um bloco <think>.
-_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+# Padrões deliberadamente lineares (`[^\n]*` em vez de `\s*.*`): estes regexes
+# rodam sobre texto vindo do LLM/usuário, e alternativas ambíguas dariam
+# backtracking polinomial (ReDoS).
+_TITLE_RE = re.compile(r"(?m)^title:[^\n]*$")
+_CUSTOM_RE = re.compile(r"(?m)^title_custom:[ \t]*(true|false)[ \t]*$")
+_HEADING_RE = re.compile(r"(?m)^#[ \t][^\n]*$")
+
+_THINK_OPEN, _THINK_CLOSE = "<think>", "</think>"
+
+
+def _strip_think(text: str) -> str:
+    """Remove blocos <think>…</think> (modelos de raciocínio, ex.: qwen3).
+
+    Feito com busca de substring — não regex — para ser linear no tamanho da
+    entrada, que vem do LLM."""
+    low = text.lower()
+    while True:
+        start = low.find(_THINK_OPEN)
+        if start == -1:
+            return text
+        end = low.find(_THINK_CLOSE, start + len(_THINK_OPEN))
+        if end == -1:  # bloco aberto sem fechar: descarta o resto
+            return text[:start]
+        text = text[:start] + text[end + len(_THINK_CLOSE) :]
+        low = text.lower()
 
 
 def clean_title(raw: str, max_len: int = 60) -> str:
     """Normaliza um título vindo do LLM: uma linha, sem aspas/markdown/ruído."""
-    text = _THINK_RE.sub("", raw or "")
+    text = _strip_think(raw or "")
     line = _first_line(text).strip()
     line = line.lstrip("#-*• ").strip().strip('"').strip("'")
     line = re.sub(r"\s+", " ", line).rstrip(".").strip()

@@ -148,3 +148,37 @@ def test_rename_conversation_inexistente_404(tmp_path, monkeypatch):
     (tmp_path / settings.CONVERSATIONS_SUBDIR).mkdir(parents=True, exist_ok=True)
     resp = TestClient(app).patch("/conversations/nao_existe", json={"title": "x"})
     assert resp.status_code == 404
+
+
+def test_clean_title_lida_com_think_repetido_sem_travar():
+    """Regressão (CodeQL/ReDoS): a limpeza roda sobre saída do LLM, então não
+    pode ter backtracking polinomial em entradas adversárias."""
+    import time
+
+    from core.journal import clean_title
+
+    inicio = time.perf_counter()
+    # Blocos abertos sem fechar: o conteúdo é descartado (cai no fallback).
+    assert clean_title("<think>" * 3000 + "Título") == "conversa"
+    # Blocos fechados repetidos: o título real sobrevive.
+    assert clean_title("<think>a</think>" * 3000 + "Título") == "Título"
+    assert time.perf_counter() - inicio < 1.0  # linear, não polinomial
+
+
+def test_clean_title_think_variantes():
+    from core.journal import clean_title
+
+    assert clean_title("<think>a</think><think>b</think>Real") == "Real"
+    assert clean_title("<THINK>x</THINK>Ok") == "Ok"
+    assert clean_title("Antes<think>sem fechar") == "Antes"
+
+
+def test_apply_title_reaplicado_nao_duplica_marcador():
+    from core.journal import apply_title, title_is_custom
+
+    nota = '---\ntitle: "a"\ndata: 2026-07-25\n---\n\n# a\n\ncorpo\n'
+    duas_vezes = apply_title(apply_title(nota, "b"), "c")
+
+    assert duas_vezes.count("title_custom") == 1
+    assert title_is_custom(duas_vezes) is True
+    assert 'title: "c"' in duas_vezes
