@@ -30,9 +30,25 @@ def _resolve_path(value: str, default: Path) -> Path:
 class Settings:
     # ── LLM ──
     LLM_PROVIDER: str = os.getenv("JADE_LLM_PROVIDER", "ollama")
-    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3")
+    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "qwen3:8b")
     OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     OLLAMA_EMBED_MODEL: str = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+    # Janela de contexto. O default do Ollama (2k–4k) trunca em silêncio o
+    # system prompt + histórico + trechos do RAG — a Jade "esquecia" o vault.
+    # 10240 foi calibrado numa RX 6600 (8 GB): é o maior valor em que o qwen3:8b
+    # ainda carrega 100% na VRAM (~6,0 GB). Acima disso o Ollama joga camadas na
+    # CPU e a geração cai pela metade (16384 → 18 tok/s vs 37 tok/s aqui).
+    # Numa GPU com mais VRAM, aumente à vontade.
+    OLLAMA_NUM_CTX: int = int(os.getenv("OLLAMA_NUM_CTX", "10240"))
+    # Temperatura do papo solto (persona, criatividade).
+    OLLAMA_TEMPERATURE: float = float(os.getenv("OLLAMA_TEMPERATURE", "0.7"))
+    # Temperatura quando a resposta deve se ancorar em fatos (RAG/tools):
+    # baixa = cita o vault em vez de inventar.
+    OLLAMA_GROUNDED_TEMPERATURE: float = float(os.getenv("OLLAMA_GROUNDED_TEMPERATURE", "0.2"))
+    # Modo "thinking" do Qwen3: desligado por padrão. Ligado, ele gera um bloco
+    # de raciocínio antes de responder — mata a latência do chat e polui a fala
+    # da Jade. Modelos sem thinking (llama3) ignoram o parâmetro sem erro.
+    OLLAMA_THINKING: bool = os.getenv("OLLAMA_THINKING", "false").strip().lower() == "true"
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
@@ -52,7 +68,9 @@ class Settings:
     # ── RAG (Obsidian) ──
     RAG_CHUNK_SIZE: int = int(os.getenv("RAG_CHUNK_SIZE", "800"))
     RAG_CHUNK_OVERLAP: int = int(os.getenv("RAG_CHUNK_OVERLAP", "120"))
-    RAG_TOP_K: int = int(os.getenv("RAG_TOP_K", "4"))
+    # 6 trechos cabem com folga em OLLAMA_NUM_CTX; com 4 a Jade perdia notas
+    # relevantes que ficavam logo abaixo do corte.
+    RAG_TOP_K: int = int(os.getenv("RAG_TOP_K", "6"))
 
     # ── Voz (Fase 3) ──
     # STT local (faster-whisper): tiny|base|small|medium|large-v3
@@ -73,7 +91,7 @@ class Settings:
         os.getenv("JADE_SYSTEM_TOOL_ENABLED", "true").strip().lower() != "false"
     )
 
-    # ── Roteador dual-model (llama3 local + Claude na nuvem) ──
+    # ── Roteador dual-model (Qwen3 local + Claude na nuvem) ──
     # Provider "nuvem" para perguntas complexas/informativas.
     CLOUD_PROVIDER: str = os.getenv("JADE_CLOUD_PROVIDER", "anthropic")
     # Modelo do Claude. Precisa de ANTHROPIC_API_KEY (≠ assinatura Claude Pro).

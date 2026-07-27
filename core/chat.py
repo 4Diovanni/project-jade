@@ -3,7 +3,7 @@
 Fluxo de cada mensagem:
 1. **Humor**: o tom da mensagem ajusta o humor da Jade (`core.mood`).
 2. **Tools**: se alguma tool aceita (ex.: "abra a calculadora"), ela age.
-3. **Modelo**: RAG do Obsidian + escolha llama3 (local) vs Claude (nuvem).
+3. **Modelo**: RAG do Obsidian + escolha Qwen3 (local) vs Claude (nuvem).
 
 O system prompt é montado a cada turno a partir da **persona**, do **humor** e do
 **perfil do usuário** (`core.persona`). Ao encerrar/limpar a conversa, a Jade
@@ -41,7 +41,8 @@ class ChatSession:
         use_router: bool = True,
         use_journal: bool | None = None,
     ) -> None:
-        self._local_llm = get_llm()  # provider padrão (Ollama / llama3)
+        self._local_llm = get_llm()  # provider padrão (Ollama / Qwen3)
+        self._grounded_llm = None  # mesmo modelo, temperatura baixa — criado sob demanda
         self._cloud_llm = None  # Claude — criado sob demanda
         self._use_rag = use_rag
         self._use_tools = use_tools
@@ -49,7 +50,7 @@ class ChatSession:
         self._history: list = []  # só turnos; o system prompt é montado a cada envio
         enabled = settings.JOURNAL_ENABLED if use_journal is None else use_journal
         self._journal: ConversationJournal | None = ConversationJournal() if enabled else None
-        #: qual cérebro respondeu o último turno: "tool" | "llama3" | "claude"
+        #: qual cérebro respondeu o último turno: "tool" | "local" | "claude"
         self.last_model: str | None = None
         self._synced = False  # sincroniza o vault (arquivos novos) na 1ª busca
 
@@ -58,6 +59,14 @@ class ChatSession:
         return self._journal.path if self._journal else None
 
     # ── LLMs ──
+    def _get_grounded_llm(self):
+        """Mesmo modelo local, mas com temperatura baixa — para quando há trechos
+        do vault no prompt e a Jade deve citá-los, não improvisar em cima deles.
+        Não custa VRAM extra: o Ollama serve o mesmo modelo já carregado."""
+        if self._grounded_llm is None:
+            self._grounded_llm = get_llm(temperature=settings.OLLAMA_GROUNDED_TEMPERATURE)
+        return self._grounded_llm
+
     def _get_cloud_llm(self):
         if self._cloud_llm is None:
             self._cloud_llm = get_llm(settings.CLOUD_PROVIDER)
@@ -77,8 +86,9 @@ class ChatSession:
             if llm is not None:
                 self.last_model = "claude"
                 return llm
-        self.last_model = "llama3"
-        return self._local_llm
+        self.last_model = "local"
+        # Com contexto do vault no prompt, vale mais fidelidade que criatividade.
+        return self._get_grounded_llm() if has_context else self._local_llm
 
     # ── system prompt vivo ──
     def _system_message(self, mood_level: int) -> SystemMessage:

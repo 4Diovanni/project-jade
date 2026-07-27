@@ -13,8 +13,12 @@ import os
 from core.config import settings
 
 
-def get_llm(provider: str | None = None):
+def get_llm(provider: str | None = None, *, temperature: float | None = None):
     """Retorna uma instância de chat LLM (LangChain) para o provider dado.
+
+    `temperature` sobrescreve o padrão do provider — use uma temperatura baixa
+    (`settings.OLLAMA_GROUNDED_TEMPERATURE`) quando a resposta precisa se ancorar
+    em fatos do vault em vez de improvisar.
 
     Levanta um erro claro se a lib do provider não estiver instalada ou se
     faltar a chave de API necessária.
@@ -29,7 +33,15 @@ def get_llm(provider: str | None = None):
         return ChatOllama(
             model=settings.OLLAMA_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
-            temperature=0.7,
+            temperature=settings.OLLAMA_TEMPERATURE if temperature is None else temperature,
+            # Sem num_ctx explícito o Ollama usa o default dele (2k–4k) e corta
+            # o começo do prompt em silêncio — some a persona e/ou o RAG.
+            num_ctx=settings.OLLAMA_NUM_CTX,
+            # `reasoning=False` vira `think: false` na API do Ollama e desliga o
+            # modo thinking do Qwen3. Precisa ser False explícito: com None o
+            # Qwen3 pensa por padrão e vaza as tags <think> na resposta.
+            # Modelos sem thinking (llama3) ignoram o parâmetro sem erro.
+            reasoning=settings.OLLAMA_THINKING,
         )
 
     if provider == "openai":

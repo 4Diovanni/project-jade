@@ -1,7 +1,7 @@
-"""Roteador dual-model — escolhe entre llama3 (local) e Claude (nuvem).
+"""Roteador dual-model — escolhe entre o modelo local (Qwen3) e Claude (nuvem).
 
 Filosofia (visão do usuário, arquitetura §8):
-- **llama3 (local, privado, barato):** conversa comum, tarefas simples e tudo
+- **Qwen3 (local, privado, barato):** conversa comum, tarefas simples e tudo
   que toca dados pessoais/memória (privacidade — não vai para a nuvem).
 - **Claude (nuvem, mais capaz):** perguntas informativas/complexas de
   conhecimento geral (ex.: "como preparar tal receita").
@@ -64,7 +64,7 @@ def looks_informational(message: str) -> bool:
 
 
 def choose_route(message: str, *, has_context: bool, cloud_available: bool) -> str:
-    """Retorna 'local' (llama3) ou 'cloud' (Claude)."""
+    """Retorna 'local' (Qwen3) ou 'cloud' (Claude)."""
     if not cloud_available:
         return "local"
     if has_context:
