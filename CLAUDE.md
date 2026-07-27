@@ -44,8 +44,12 @@ Obsidian. Documento-fonte da arquitetura: `projeto_jade_arquitetura.md`.
 - Segredos só no `.env` (gitignored). Nunca commitar chaves.
 - Nova capacidade = nova tool em `tools/` implementando `JadeTool` e registrada
   em `tools/registry.py`. Ver a skill **add-jade-tool**.
-- O vault do Obsidian é a raiz do repo (`OBSIDIAN_VAULT_PATH=.`). Ao indexar,
-  ignore `settings.VAULT_IGNORE` (.obsidian, .claude, database, código...).
+- **Leitura ≠ escrita.** `OBSIDIAN_VAULT_PATH=.` é o que a Jade **lê** (a raiz do
+  repo, para ela conhecer os próprios docs); `JADE_NOTES_DIR=obsidian_notes` é
+  onde ela **escreve** (conversas, humor, perfil, áudios). São separados porque
+  `obsidian_notes/` é gitignorado — escrever na raiz jogaria conversas pessoais
+  dentro do git. Ao indexar, ignore `settings.VAULT_IGNORE` (.obsidian, .claude,
+  database, pastas de código, `docs/`, caches...).
 
 ## Skills disponíveis (`.claude/skills/`)
 - **add-jade-tool** — scaffold de uma nova tool + registro no roteador.

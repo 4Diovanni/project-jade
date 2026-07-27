@@ -158,7 +158,7 @@ def instruction(level: int) -> str:
 
 # ── Persistência (Jade — Humor.md) ───────────────────────────
 def _note_path() -> Path:
-    return settings.OBSIDIAN_VAULT_PATH / settings.MOOD_NOTE
+    return settings.NOTES_DIR / settings.MOOD_NOTE
 
 
 def load_level() -> int:
