@@ -15,12 +15,17 @@ Obsidian. Documento-fonte da arquitetura: `projeto_jade_arquitetura.md`.
   reindexadas no RAG (histórico = memória de longo prazo).
 - **Meta futura:** "pensamento próprio" — emular tom/ideias do usuário a partir
   das conversas acumuladas.
-- **Roteamento dual-model (futuro):** llama3 (local) p/ ações comuns/rastreáveis
+- **Roteamento dual-model (futuro):** modelo local p/ ações comuns/rastreáveis
   (ex.: renomear pasta); Claude (nuvem) p/ complexo/informativo (ex.: receita).
 
 ## Stack
 - **Backend:** Python 3.11+ · FastAPI · LangChain
 - **LLM:** Ollama (local, padrão) ou OpenAI/Anthropic/Gemini — escolhido por `JADE_LLM_PROVIDER`
+- **Modelo local:** `qwen3:8b` (tool-calling nativo, 32K de contexto, PT-BR sólido).
+  `OLLAMA_NUM_CTX=10240` é o teto para ele caber 100% na VRAM de uma GPU de 8 GB;
+  acima disso o Ollama joga camadas na CPU e a geração cai pela metade. O modo
+  *thinking* fica **desligado** (`OLLAMA_THINKING=false`) — ligado, ele raciocina
+  antes de responder e as tags `<think>` poluem a fala da Jade.
 - **Memória:** SQLite (histórico) + ChromaDB (vetores do Obsidian)
 - **Config:** tudo via `.env` (ver `.env.example`), lido por `core/config.py`
 
@@ -64,9 +69,10 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
   **embeddings via Ollama** (`nomic-embed-text`, sem PyTorch); `ChatSession`
   injeta os trechos recuperados (RAG-augmented chat, com fallback p/ chat puro).
   Comandos: `python main.py index` e endpoints `/index` `/search`.
-- Requer Ollama + `ollama pull llama3` + `ollama pull nomic-embed-text`.
+- Requer Ollama + `ollama pull qwen3:8b` + `ollama pull nomic-embed-text`.
 - **Decisão de design:** agente multi-tool (`core/agent_router.py`) fica para a
-  Fase 4 (llama3 não faz tool-calling confiável); Fase 2 usa RAG direto no chat.
+  Fase 4 (o llama3 de então não fazia tool-calling confiável); Fase 2 usa RAG
+  direto no chat.
 
 - Fase 3 (voz): `interfaces/voice_service.py` — STT local `faster-whisper`
   (sem PyTorch) + TTS `edge-tts` (padrão) ou `pyttsx3` (offline). CLI
@@ -76,12 +82,12 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
 
 - Fase 4 (As Mãos — em progresso): `core/agent_router.py` faz **roteamento
   determinístico** (cada tool declara `trigger_hints` e valida em `accepts()`;
-  sem depender de tool-calling do llama3). `tools/system_tool.py` = controle do
+  sem depender de tool-calling do LLM). `tools/system_tool.py` = controle do
   SO (abrir apps de **whitelist**, volume via teclas de mídia, busca web);
   `ChatSession` roteia p/ tool antes do RAG. Falta: Spotify e e-mail.
 
 - **Roteador dual-model** (`core/model_router.py`): `ChatSession` decide entre
-  **llama3 (local)** e **Claude (nuvem)** por turno. Heurística determinística:
+  **Qwen3 (local)** e **Claude (nuvem)** por turno. Heurística determinística:
   dados pessoais/RAG e conversa comum → local (privacidade); perguntas
   informativas/complexas → Claude. Só escala se houver `ANTHROPIC_API_KEY`
   (senão fica 100% local). Model default `claude-opus-4-8` (via `langchain-anthropic`;
