@@ -26,6 +26,16 @@ export const getConversation = (id) =>
     return r.json();
   });
 
+export async function renameConversation(id, title) {
+  const res = await fetch(`/conversations/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw new Error(`PATCH /conversations/${id} → ${res.status}`);
+  return res.json();
+}
+
 export async function ttsUrl(text) {
   const res = await fetch("/voice/tts", {
     method: "POST",

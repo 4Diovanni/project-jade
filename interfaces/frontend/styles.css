@@ -27,8 +27,11 @@ body { margin: 0; height: 100vh; overflow: hidden; background: var(--bg); color:
 .chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .messages { flex: 1; min-height: 0; overflow-y: auto; padding: 20px; display: flex;
   flex-direction: column; gap: 12px; }
-.bubble { max-width: 80%; padding: 10px 14px; border-radius: 12px; line-height: 1.4;
-  word-wrap: break-word; overflow-wrap: anywhere; }
+/* flex-shrink:0 é essencial: sem isso, num flex column com altura fixa cada
+   balão é COMPRIMIDO e vira uma janelinha com scroll própria. Com isso, o balão
+   mantém a altura natural e quem rola é só o .messages (como no ChatGPT). */
+.bubble { flex: 0 0 auto; max-width: 80%; padding: 10px 14px; border-radius: 12px;
+  line-height: 1.4; word-wrap: break-word; overflow-wrap: anywhere; }
 /* usuário/erro são texto plano: preservam quebras de linha. */
 .bubble.user, .bubble.error { white-space: pre-wrap; }
 .bubble.user { align-self: flex-end; background: var(--jade-emerald); color: #eafff5; }
@@ -49,7 +52,15 @@ body { margin: 0; height: 100vh; overflow: hidden; background: var(--bg); color:
 .bubble.jade pre { background: #0a1410; padding: 10px; border-radius: 8px;
   overflow-x: auto; margin: 6px 0; }
 .bubble.jade pre code { background: none; padding: 0; }
-.badge { font-size: 11px; color: var(--muted); margin-top: 4px; align-self: flex-start; }
+.badge { flex: 0 0 auto; font-size: 11px; color: var(--muted); margin-top: 4px;
+  align-self: flex-start; }
+/* Item da lista: título + botão de renomear. */
+.threads-list li { display: flex; align-items: center; gap: 6px; }
+.thread-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-rename { flex: none; visibility: hidden; background: none; border: none; padding: 0 2px;
+  color: var(--muted); cursor: pointer; font-size: 12px; }
+.threads-list li:hover .thread-rename { visibility: visible; }
+.thread-rename:hover { color: var(--jade-spring); }
 .composer { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #16211c; }
 .composer-input { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #22332b;
   background: #0c1210; color: var(--text); }

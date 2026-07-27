@@ -170,6 +170,70 @@ class ChatSession:
             lines.append(f"{role}: {m.content}")
         return "\n".join(lines)
 
+    @property
+    def conversation_id(self) -> str | None:
+        """Identificador da conversa atual (nome do arquivo, sem extensão)."""
+        p = self.journal_path
+        return p.stem if p is not None else None
+
+    def rename(self, title: str) -> str | None:
+        """Renomeia a conversa atual (título definido pelo usuário)."""
+        if self._journal is None:
+            return None
+        return self._journal.set_title(title, custom=True)
+
+    def title_task(self, min_turns: int = 2):
+        """Devolve a tarefa que resume o assunto da conversa num título (ou None).
+
+        Roda em segundo plano: envolve uma chamada ao LLM, que não pode bloquear
+        a resposta ao usuário."""
+        journal = self._journal
+        if journal is None or not journal.needs_title(min_turns):
+            return None
+        transcript = self._transcript()
+        llm = self._local_llm
+
+        def _run() -> None:
+            with contextlib.suppress(Exception):
+                from core.journal import generate_title
+
+                journal.apply_generated_title(generate_title(transcript, llm))
+
+        return _run
+
+    def detach(self):
+        """Encerra a conversa: limpa a sessão **na hora** e devolve o trabalho
+        pesado (título, RAG, perfil) para rodar em segundo plano.
+
+        O `/reset` da API usa isto para responder instantaneamente — antes, o
+        botão "novo chat" esperava chamadas ao LLM e à indexação."""
+        journal = self._journal
+        history_len = len(self._history)
+        transcript = self._transcript()
+        llm = self._local_llm
+
+        self._history = []
+        self.last_model = None
+        if journal is not None:
+            self._journal = ConversationJournal()
+
+        def _finish() -> None:
+            if journal is not None:
+                if journal.needs_title():
+                    with contextlib.suppress(Exception):
+                        from core.journal import generate_title
+
+                        journal.apply_generated_title(generate_title(transcript, llm))
+                with contextlib.suppress(Exception):
+                    journal.finalize()
+            if settings.PROFILE_UPDATE_ENABLED and history_len >= 4:
+                with contextlib.suppress(Exception):
+                    from core.profile import update_from_conversation
+
+                    update_from_conversation(transcript, llm)
+
+        return _finish
+
     def learn_from_conversation(self) -> None:
         """Encerra a conversa: indexa no RAG (memória entre chats) e aprende sobre
         o usuário. Indexar só aqui evita o loop de a conversa se recuperar a si mesma."""
@@ -183,9 +247,7 @@ class ChatSession:
                 update_from_conversation(self._transcript(), self._local_llm)
 
     def reset(self) -> None:
-        """Aprende com a conversa, limpa o histórico e inicia uma nova nota."""
-        self.learn_from_conversation()
-        self._history = []
-        self.last_model = None
-        if self._journal is not None:
-            self._journal = ConversationJournal()
+        """Encerra a conversa e limpa o histórico, de forma **síncrona**.
+
+        Usado pela CLI. A API usa `detach()` para não travar a interface."""
+        self.detach()()

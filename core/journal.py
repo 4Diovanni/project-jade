@@ -57,6 +57,64 @@ def _title_from(message: str, max_len: int = 60) -> str:
     return (title[:max_len]).strip() or "conversa"
 
 
+# ── Título da conversa (gerado por contexto / editável) ──────
+_TITLE_RE = re.compile(r"(?m)^title:\s*.*$")
+_CUSTOM_RE = re.compile(r"(?m)^title_custom:\s*(true|false)\s*$")
+_HEADING_RE = re.compile(r"(?m)^#\s+.*$")
+# Modelos "de raciocínio" (ex.: qwen3) podem emitir um bloco <think>.
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+
+
+def clean_title(raw: str, max_len: int = 60) -> str:
+    """Normaliza um título vindo do LLM: uma linha, sem aspas/markdown/ruído."""
+    text = _THINK_RE.sub("", raw or "")
+    line = _first_line(text).strip()
+    line = line.lstrip("#-*• ").strip().strip('"').strip("'")
+    line = re.sub(r"\s+", " ", line).rstrip(".").strip()
+    return line[:max_len].strip() or "conversa"
+
+
+def generate_title(conversation: str, llm) -> str:
+    """Pede ao LLM um título curto que resuma o ASSUNTO da conversa."""
+    prompt = (
+        "Leia a conversa abaixo e responda APENAS com um título curto (3 a 6 "
+        "palavras) que resuma o assunto principal, em português. Sem aspas, sem "
+        "pontuação final, sem explicação.\n\n"
+        f"Conversa:\n{conversation}"
+    )
+    resp = llm.invoke(prompt)
+    text = resp.content if hasattr(resp, "content") else str(resp)
+    return clean_title(text)
+
+
+def title_is_custom(text: str) -> bool:
+    """True se o título da nota foi definido pelo usuário (não sobrescrever)."""
+    m = _CUSTOM_RE.search(text)
+    return bool(m and m.group(1) == "true")
+
+
+def apply_title(text: str, title: str, *, custom: bool = True) -> str:
+    """Troca o título de uma nota de conversa (frontmatter + cabeçalho `# `).
+
+    O nome do arquivo NÃO muda — o id da conversa continua estável."""
+    safe = clean_title(title).replace('"', "'")
+    out = _TITLE_RE.sub(lambda _: f'title: "{safe}"', text, count=1)
+    if _CUSTOM_RE.search(out):
+        out = _CUSTOM_RE.sub(lambda _: f"title_custom: {str(custom).lower()}", out, count=1)
+    elif custom:
+        out = _TITLE_RE.sub(lambda _: f'title: "{safe}"\ntitle_custom: true', out, count=1)
+    return _HEADING_RE.sub(lambda _: f"# {safe}", out, count=1)
+
+
+def set_note_title(path: str | Path, title: str, *, custom: bool = True) -> str:
+    """Renomeia o título de uma nota de conversa já salva. Retorna o título aplicado."""
+    p = Path(path)
+    text = p.read_text(encoding="utf-8", errors="ignore")
+    updated = apply_title(text, title, custom=custom)
+    p.write_text(updated, encoding="utf-8")
+    return clean_title(title)
+
+
 def _safe_filename(text: str) -> str:
     # Windows não permite ponto/espaço no fim do nome de arquivo.
     cleaned = _INVALID_FS.sub("", text).strip().rstrip(". ")
@@ -75,10 +133,39 @@ class ConversationJournal:
         self._turns: list[tuple[str, str]] = []
         self._path: Path | None = None
         self._related: list[str] = []
+        self._title_custom = False  # título definido pelo usuário → nunca sobrescrever
+        self._title_generated = False  # título já resumido pelo LLM
 
     @property
     def path(self) -> Path | None:
         return self._path
+
+    @property
+    def title(self) -> str | None:
+        return self._title
+
+    def set_title(self, title: str, *, custom: bool = True) -> str:
+        """Troca o título da conversa (mantendo o arquivo/id). Reescreve a nota."""
+        self._title = clean_title(title)
+        self._title_custom = custom
+        if self._path is not None:
+            self._path.write_text(self._render(), encoding="utf-8")
+        return self._title
+
+    def needs_title(self, min_turns: int = 2) -> bool:
+        """True se vale gerar um título por contexto (há conversa suficiente e o
+        título ainda é o palpite da primeira mensagem)."""
+        return (
+            self._path is not None
+            and not self._title_custom
+            and not self._title_generated
+            and len(self._turns) >= min_turns
+        )
+
+    def apply_generated_title(self, title: str) -> None:
+        """Aplica um título vindo do LLM (não marca como definido pelo usuário)."""
+        self._title_generated = True
+        self.set_title(title, custom=False)
 
     def record(self, user_message: str, jade_reply: str) -> Path:
         """Adiciona um turno (pergunta + resposta) e (re)escreve a nota."""
@@ -151,7 +238,8 @@ class ConversationJournal:
         frontmatter = (
             "---\n"
             f'title: "{title}"\n'
-            f"data: {date}\n"
+            + ("title_custom: true\n" if self._title_custom else "")
+            + f"data: {date}\n"
             f"created: {self._started.isoformat(timespec='seconds')}\n"
             f"updated: {datetime.now().isoformat(timespec='seconds')}\n"
             f"turnos: {len(self._turns)}\n"

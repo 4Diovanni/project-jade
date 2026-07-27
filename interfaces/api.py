@@ -8,7 +8,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -41,18 +41,28 @@ def health() -> dict:
 
 
 @app.post("/chat")
-def chat(req: ChatRequest) -> dict:
+def chat(req: ChatRequest, background: BackgroundTasks) -> dict:
     session = _get_session()
     try:
         reply = session.send(req.message)
     except Exception as e:  # provider fora do ar, chave faltando, etc.
         raise HTTPException(status_code=503, detail=f"Jade indisponível: {e}") from e
-    return {"reply": reply, "model": session.last_model}
+    # Resume o assunto num título — depois de responder, para não atrasar o chat.
+    task = session.title_task()
+    if task is not None:
+        background.add_task(task)
+    return {
+        "reply": reply,
+        "model": session.last_model,
+        "conversation_id": session.conversation_id,
+    }
 
 
 @app.post("/reset")
-def reset() -> dict:
-    _get_session().reset()
+def reset(background: BackgroundTasks) -> dict:
+    """Começa uma conversa nova. Responde na hora: indexar no RAG, resumir o
+    título e aprender sobre o usuário rodam em segundo plano."""
+    background.add_task(_get_session().detach())
     return {"status": "histórico limpo"}
 
 
@@ -133,6 +143,27 @@ def get_conversation(conv_id: str) -> dict:
     }
 
 
+class RenameRequest(BaseModel):
+    title: str
+
+
+@app.patch("/conversations/{conv_id}")
+def rename_conversation(conv_id: str, req: RenameRequest) -> dict:
+    """Renomeia o título de uma conversa (o arquivo/id não muda)."""
+    from core.journal import set_note_title
+
+    safe = Path(conv_id).name  # anti path-traversal
+    path = _conversations_dir() / f"{safe}.md"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Conversa não encontrada.")
+    title = set_note_title(path, req.title, custom=True)
+    # Se for a conversa em andamento, mantém o título em memória em sincronia
+    # (senão o próximo turno reescreveria a nota com o título antigo).
+    if _session is not None and _session.conversation_id == safe:
+        _session.rename(title)
+    return {"id": safe, "title": title}
+
+
 @app.get("/")
 def root() -> RedirectResponse:
     return RedirectResponse(url="/app/")
@@ -204,6 +235,7 @@ async def voice_chat(file: UploadFile = File(...)) -> dict:
         "audio_file": str(audio_path),
         "audio_url": f"/voice/audio/{audio_path.name}",
         "model": session.last_model,
+        "conversation_id": session.conversation_id,
     }
 
 
