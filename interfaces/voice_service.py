@@ -94,7 +94,23 @@ def _synthesize_edge(text: str, out: Path, voice: str) -> None:
     async def _run() -> None:
         await edge_tts.Communicate(text, voice).save(str(out))
 
-    asyncio.run(_run())
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        running_loop = False
+    else:
+        running_loop = True
+
+    if not running_loop:
+        # Caminho comum (CLI, endpoint síncrono no threadpool): sem loop ativo.
+        asyncio.run(_run())
+    else:
+        # Já há um event loop rodando (ex.: endpoint async /voice/chat da FastAPI):
+        # asyncio.run() falharia aqui, então rodamos a corotina num thread próprio.
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(lambda: asyncio.run(_run())).result()
 
 
 def _synthesize_pyttsx3(text: str, out: Path) -> None:

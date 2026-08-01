@@ -135,3 +135,29 @@ def test_reset_limpa_o_historico(monkeypatch):
 
     assert sess._history == []
     assert sess.last_model is None
+
+
+def test_detach_limpa_na_hora_e_adia_o_trabalho_pesado(monkeypatch):
+    """O botão 'novo chat' não pode esperar LLM/indexação: detach() limpa a
+    sessão imediatamente e devolve o trabalho pesado para rodar depois."""
+    monkeypatch.setattr(chat_mod, "cloud_available", lambda: False)
+    chamou = {"perfil": False}
+
+    def _fake_update(transcript, llm):
+        chamou["perfil"] = True
+
+    monkeypatch.setattr("core.profile.update_from_conversation", _fake_update)
+    sess = _session(use_tools=False)
+    for _ in range(2):
+        sess.send("oi")
+    assert sess._history
+
+    finish = sess.detach()
+
+    # Limpou já; nada de LLM/perfil ainda.
+    assert sess._history == []
+    assert sess.last_model is None
+    assert chamou["perfil"] is False
+
+    finish()  # só agora (em background, na API) roda o trabalho pesado
+    assert chamou["perfil"] is True
