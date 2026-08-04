@@ -87,6 +87,59 @@ def test_rejeita_yaml_que_nao_e_lista(tmp_path):
         load_cases(arquivo)
 
 
+def test_rejeita_caso_sem_id(tmp_path):
+    arquivo = _escreve(tmp_path, "tools.yaml", '- message: "a"\n  expect: { route: local }\n')
+    with pytest.raises(CaseError, match="caso sem"):
+        load_cases(arquivo)
+
+
+def test_rejeita_item_que_nao_e_mapeamento(tmp_path):
+    arquivo = _escreve(tmp_path, "tools.yaml", '- "string ao invés de mapeamento"\n')
+    with pytest.raises(CaseError, match="mapeamento"):
+        load_cases(arquivo)
+
+
+def test_rejeita_expect_que_nao_e_mapeamento(tmp_path):
+    arquivo = _escreve(
+        tmp_path, "tools.yaml", '- id: x\n  message: "a"\n  expect: "string ao invés de dict"\n'
+    )
+    with pytest.raises(CaseError, match="expect"):
+        load_cases(arquivo)
+
+
+def test_rejeita_context_invalido(tmp_path):
+    arquivo = _escreve(
+        tmp_path, "tools.yaml", '- id: x\n  message: "a"\n  expect: { context: invalid }\n'
+    )
+    with pytest.raises(CaseError, match="invalid"):
+        load_cases(arquivo)
+
+
+def test_rejeita_mood_delta_invalido(tmp_path):
+    arquivo = _escreve(
+        tmp_path, "tools.yaml", '- id: x\n  message: "a"\n  expect: { mood_delta: angry }\n'
+    )
+    with pytest.raises(CaseError, match="angry"):
+        load_cases(arquivo)
+
+
+def test_rejeita_sources_include_que_nao_e_lista(tmp_path):
+    arquivo = _escreve(
+        tmp_path,
+        "tools.yaml",
+        '- id: x\n  message: "a"\n  expect: { sources_include: "não lista" }\n',
+    )
+    with pytest.raises(CaseError, match="sources_include"):
+        load_cases(arquivo)
+
+
+def test_rejeita_diretorio_vazio(tmp_path):
+    diretorio_vazio = tmp_path / "vazio"
+    diretorio_vazio.mkdir()
+    with pytest.raises(CaseError, match="nenhum arquivo"):
+        load_cases(diretorio_vazio)
+
+
 def test_os_casos_reais_do_projeto_sao_validos():
     """Os casos versionados em bench/cases/ precisam passar na validação."""
     casos = load_cases("bench/cases")
