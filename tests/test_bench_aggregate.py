@@ -170,3 +170,19 @@ def test_summarize_tokens_por_segundo():
 def test_summarize_sem_dados_de_token():
     resumo = summarize([_res("a", "papo", "ok")])
     assert resumo["tokens_per_second"] is None
+
+
+def test_summarize_sem_dados_de_prompt_tokens():
+    resumo = summarize([_res("a", "papo", "ok")])
+    assert resumo["prompt_tokens"] is None
+
+
+def test_summarize_prompt_tokens_p50_p95():
+    resultados = [
+        _res("a", "papo", "ok", meta={"prompt_eval_count": 10}),
+        _res("b", "papo", "ok", meta={"prompt_eval_count": 50}),
+    ]
+    resumo = summarize(resultados)
+    # Percentil por nearest-rank: com n=2, o p50 é o menor e o p95 é o maior.
+    assert resumo["prompt_tokens"]["p50"] == 10.0
+    assert resumo["prompt_tokens"]["p95"] == 50.0
