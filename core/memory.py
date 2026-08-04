@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 
 from core.config import settings
+from core.metrics import note, timed
 
 
 def _meta_notes() -> set[str]:
@@ -147,18 +148,27 @@ def query_memory(question: str, k: int | None = None) -> list[str]:
     k = k or settings.RAG_TOP_K
     collection = _get_collection()
     if collection.count() == 0:
+        note(chunks=0, sources=[])
         return []
 
-    q_emb = _get_embedder().embed_query(question)
-    res = collection.query(query_embeddings=[q_emb], n_results=k)
+    with timed("rag_embed"):
+        q_emb = _get_embedder().embed_query(question)
+    with timed("rag_search"):
+        res = collection.query(query_embeddings=[q_emb], n_results=k)
 
     docs = (res.get("documents") or [[]])[0]
     metas = (res.get("metadatas") or [[]])[0]
 
     out: list[str] = []
+    sources: list[str] = []
     for doc, meta in zip(docs, metas, strict=False):
         source = (meta or {}).get("source", "?")
+        if source not in sources:
+            sources.append(source)
         out.append(f"[{source}]\n{doc}")
+    # As fontes vão para as métricas aqui, onde ainda são estruturadas — o bench
+    # nunca deve reparsear as strings "[source]\n…" devolvidas.
+    note(chunks=len(out), sources=sources)
     return out
 
 

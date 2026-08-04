@@ -49,3 +49,31 @@ def test_index_state_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "CHROMA_DB_PATH", str(tmp_path / "chroma"))
     memory._save_state({"a.md": 1.5, "b.txt": 2.0})
     assert memory._load_state() == {"a.md": 1.5, "b.txt": 2.0}
+
+
+def test_query_memory_registra_etapas_e_fontes(monkeypatch):
+    """query_memory mede embed e busca separadamente e anota as fontes."""
+    from core import metrics
+
+    class FakeCollection:
+        def count(self):
+            return 3
+
+        def query(self, **kwargs):
+            return {
+                "documents": [["trecho A", "trecho B"]],
+                "metadatas": [[{"source": "CLAUDE.md"}, {"source": "CLAUDE.md"}]],
+            }
+
+    monkeypatch.setattr(memory, "_get_collection", lambda: FakeCollection())
+    monkeypatch.setattr(
+        memory, "_get_embedder", lambda: type("E", (), {"embed_query": lambda self, q: [0.1]})()
+    )
+
+    with metrics.capture() as turn:
+        out = memory.query_memory("qual o modelo local?")
+
+    assert len(out) == 2
+    assert {"rag_embed", "rag_search"} <= set(turn.steps)
+    assert turn.meta["chunks"] == 2
+    assert turn.meta["sources"] == ["CLAUDE.md"]  # sem repetição

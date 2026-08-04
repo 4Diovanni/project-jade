@@ -20,6 +20,7 @@ from core.agent_router import route
 from core.config import settings
 from core.journal import ConversationJournal
 from core.llm_engine import get_llm
+from core.metrics import note, timed
 from core.model_router import choose_route, cloud_available
 from core.persona import build_system_prompt
 
@@ -28,6 +29,23 @@ _CONTEXT_TEMPLATE = (
     "NÃO as liste nem repita conversas passadas):\n\n{context}\n\n---\n"
     "Responda de forma objetiva SÓ a esta mensagem: {question}"
 )
+
+
+def _note_llm_usage(response) -> None:
+    """Anota os contadores de token do provider, quando existirem.
+
+    O Ollama devolve `eval_count`/`eval_duration` (tok/s real) e
+    `prompt_eval_count` (tamanho do prompt em tokens de verdade). Providers que
+    não devolvem esses campos simplesmente não são anotados.
+    """
+    meta = getattr(response, "response_metadata", None) or {}
+    usage = {
+        key: meta[key]
+        for key in ("eval_count", "eval_duration", "prompt_eval_count")
+        if key in meta
+    }
+    if usage:
+        note(**usage)
 
 
 class ChatSession:
@@ -85,8 +103,10 @@ class ChatSession:
             llm = self._try_cloud_llm()
             if llm is not None:
                 self.last_model = "claude"
+                note(route="cloud")  # métricas usam "cloud"; last_model, "claude"
                 return llm
         self.last_model = "local"
+        note(route="local")
         # Com contexto do vault no prompt, vale mais fidelidade que criatividade.
         return self._get_grounded_llm() if has_context else self._local_llm
 
@@ -118,7 +138,8 @@ class ChatSession:
     def _retrieve_context(self, message: str) -> str:
         if not self._use_rag:
             return ""
-        self._ensure_synced()
+        with timed("rag_sync"):
+            self._ensure_synced()
         try:
             from core.memory import query_memory
 
@@ -131,21 +152,26 @@ class ChatSession:
         """Processa uma mensagem: humor → tool → senão conversa (modelo + RAG)."""
         # 1) O tom do usuário ajusta o humor da Jade (persistido).
         mood_level = 0
-        with contextlib.suppress(Exception):
+        with timed("mood"), contextlib.suppress(Exception):
             from core.mood import register
 
             mood_level, _label = register(message)
+        note(mood_level=mood_level)
 
         # 2) Roteamento para tools (as "mãos" da Jade).
         if self._use_tools:
-            tool = route(message)
+            with timed("tool_route"):
+                tool = route(message)
             if tool is not None:
+                note(route="tool", tool=getattr(tool, "name", "?"))
                 try:
-                    text = tool.run(message)
+                    with timed("tool_run"):
+                        text = tool.run(message)
                 except Exception as e:
                     text = f"Não consegui executar a ação: {e}"
                 self.last_model = "tool"
-                self._record(message, text)
+                with timed("journal"):
+                    self._record(message, text)
                 return text
 
         # 3) Conversa. Contexto do RAG é injetado só na chamada ao LLM.
@@ -158,9 +184,12 @@ class ChatSession:
             user_turn = HumanMessage(content=augmented)
 
         messages = [self._system_message(mood_level), *self._history, user_turn]
-        response = llm.invoke(messages)
+        with timed("llm"):
+            response = llm.invoke(messages)
+        _note_llm_usage(response)
         text = response.content if hasattr(response, "content") else str(response)
-        self._record(message, text)
+        with timed("journal"):
+            self._record(message, text)
         return text
 
     def _transcript(self) -> str:
