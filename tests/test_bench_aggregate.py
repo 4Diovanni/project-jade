@@ -3,7 +3,7 @@
 Funções puras: recebem casos e turnos sintéticos. Nada de LLM, nada de I/O.
 """
 
-from bench.aggregate import Result, evaluate, percentile, summarize
+from bench.aggregate import Failure, Result, evaluate, percentile, summarize
 from bench.cases import Case
 from core.metrics import Turn
 
@@ -26,7 +26,14 @@ def test_rota_correta_passa():
 def test_rota_errada_falha_com_motivo():
     status, falhas = evaluate(_caso({"route": "cloud"}), _turno({"route": "local"}), mood_before=0)
     assert status == "falhou"
-    assert "route" in falhas[0]
+    assert falhas[0].dimension == "route"
+    assert "esperava 'cloud', veio 'local'" in falhas[0].message
+
+
+def test_falha_se_formata_com_a_dimensao_na_frente():
+    """O texto do relatório continua sendo `dimensão: motivo`."""
+    _status, falhas = evaluate(_caso({"route": "cloud"}), _turno({"route": "local"}), mood_before=0)
+    assert str(falhas[0]).startswith("route: ")
 
 
 def test_nome_da_tool_e_conferido():
@@ -36,14 +43,15 @@ def test_nome_da_tool_e_conferido():
         mood_before=0,
     )
     assert status == "falhou"
-    assert any("tool" in f for f in falhas)
+    assert [f.dimension for f in falhas] == ["tool"]
 
 
 def test_sources_include_exige_todas_as_fontes():
     caso = _caso({"sources_include": ["CLAUDE.md", "README.md"]})
     status, falhas = evaluate(caso, _turno({"sources": ["CLAUDE.md"]}), mood_before=0)
     assert status == "falhou"
-    assert "README.md" in falhas[0]
+    assert falhas[0].dimension == "sources_include"
+    assert "README.md" in falhas[0].message
 
 
 def test_sources_include_passa_quando_todas_presentes():
@@ -55,7 +63,7 @@ def test_sources_include_passa_quando_todas_presentes():
 def test_context_none_falha_quando_veio_contexto():
     status, falhas = evaluate(_caso({"context": "none"}), _turno({"chunks": 6}), mood_before=0)
     assert status == "falhou"
-    assert "context" in falhas[0]
+    assert falhas[0].dimension == "context"
 
 
 def test_context_none_passa_sem_chunks():
@@ -78,14 +86,14 @@ def test_mood_delta_neutral_falha_se_mudou():
     caso = _caso({"mood_delta": "neutral"})
     status, falhas = evaluate(caso, _turno({"mood_level": 3}), mood_before=0)
     assert status == "falhou"
-    assert "mood" in falhas[0]
+    assert falhas[0].dimension == "mood_delta"
 
 
 def test_varias_falhas_sao_acumuladas():
     caso = _caso({"route": "cloud", "context": "none"})
     status, falhas = evaluate(caso, _turno({"route": "local", "chunks": 6}), mood_before=0)
     assert status == "falhou"
-    assert len(falhas) == 2
+    assert {f.dimension for f in falhas} == {"route", "context"}
 
 
 # ── percentile ──
@@ -102,34 +110,113 @@ def test_percentile_p95_pega_o_topo():
 
 
 # ── summarize ──
-def _res(cid, categoria, status, steps=None, meta=None):
+def _res(cid, categoria, status, steps=None, meta=None, expect=None, falhas=()):
+    """Result sintético. `expect` é o que o caso declarou; `falhas`, as dimensões
+    em que ele errou — é essa combinação que as métricas por dimensão leem."""
+    meta = dict(meta or {})
+    meta["_expect"] = dict(expect or {})
     return Result(
         case_id=cid,
         category=categoria,
         status=status,
-        failures=[],
+        failures=[Failure(d, "motivo") for d in falhas],
         steps=steps or {"total": 1.0},
-        meta=meta or {},
+        meta=meta,
     )
 
 
 def test_summarize_acerto_de_rota():
     resultados = [
-        _res("a", "tools", "ok"),
-        _res("b", "tools", "falhou"),
-        _res("c", "papo", "ok"),
+        _res("a", "tools", "ok", expect={"route": "tool"}),
+        _res("b", "tools", "falhou", expect={"route": "tool"}, falhas=["route"]),
+        _res("c", "papo", "ok", expect={"route": "local"}),
     ]
     resumo = summarize(resultados)
     assert resumo["route_accuracy"] == 2 / 3
-    assert resumo["by_category"]["tools"]["accuracy"] == 0.5
-    assert resumo["by_category"]["papo"]["accuracy"] == 1.0
+    assert resumo["by_category"]["tools"]["pass_rate"] == 0.5
+    assert resumo["by_category"]["papo"]["pass_rate"] == 1.0
 
 
 def test_summarize_ignora_pulados_na_acuracia():
-    resultados = [_res("a", "tools", "ok"), _res("b", "conhecimento", "pulado")]
+    resultados = [
+        _res("a", "tools", "ok", expect={"route": "tool"}),
+        _res("b", "conhecimento", "pulado", expect={"route": "cloud"}),
+    ]
     resumo = summarize(resultados)
     assert resumo["route_accuracy"] == 1.0
     assert resumo["skipped"] == 1
+
+
+# ── métricas por dimensão: cada uma conta SÓ a sua própria falha ──
+def test_route_accuracy_ignora_falha_de_outra_dimensao():
+    """A regressão que motivou esta correção: um caso de `papo` que roteia certo
+    mas puxa contexto indevido é **acerto de rota** e **erro de contexto**.
+
+    Antes, `route_accuracy` era a taxa de aprovação integral, e esses casos
+    apareciam como 0% de roteamento — o relatório acusava um defeito que não
+    existia."""
+    resultados = [
+        _res(
+            "papo",
+            "papo",
+            "falhou",
+            expect={"route": "local", "context": "none"},
+            falhas=["context"],
+        )
+    ]
+    resumo = summarize(resultados)
+    assert resumo["route_accuracy"] == 1.0
+    assert resumo["context_precision"] == 0.0
+    assert resumo["pass_rate"] == 0.0
+
+
+def test_recall_at_k_ignora_falha_de_rota_no_mesmo_caso():
+    resultados = [
+        _res(
+            "mem",
+            "memoria",
+            "falhou",
+            expect={"route": "local", "sources_include": ["CLAUDE.md"]},
+            falhas=["route"],
+        )
+    ]
+    resumo = summarize(resultados)
+    assert resumo["recall_at_k"] == 1.0
+    assert resumo["route_accuracy"] == 0.0
+
+
+def test_context_precision_cobre_so_os_casos_none():
+    """`context: any` mede cobertura, não precisão — não pode entrar no
+    denominador da precisão de contexto."""
+    resultados = [
+        _res("p1", "papo", "falhou", expect={"context": "none"}, falhas=["context"]),
+        _res("p2", "papo", "falhou", expect={"context": "none"}, falhas=["context"]),
+        _res("m1", "memoria", "ok", expect={"context": "any"}),
+        _res("m2", "memoria", "ok", expect={"context": "any"}),
+    ]
+    resumo = summarize(resultados)
+    # Só os dois `none`, ambos falhos → 0%. Misturando os `any` daria 50%.
+    assert resumo["context_precision"] == 0.0
+
+
+def test_metricas_sao_none_quando_ninguem_declara_a_dimensao():
+    resultados = [_res("a", "humor", "ok", expect={"mood_delta": "neutral"})]
+    resumo = summarize(resultados)
+    assert resumo["route_accuracy"] is None
+    assert resumo["recall_at_k"] is None
+    assert resumo["context_precision"] is None
+
+
+def test_pass_rate_continua_sendo_aprovacao_integral():
+    resultados = [
+        _res("a", "tools", "ok", expect={"route": "tool"}),
+        _res(
+            "b", "tools", "falhou", expect={"route": "tool", "context": "none"}, falhas=["context"]
+        ),
+    ]
+    resumo = summarize(resultados)
+    assert resumo["pass_rate"] == 0.5
+    assert resumo["route_accuracy"] == 1.0
 
 
 def test_summarize_distribuicao_de_rotas():

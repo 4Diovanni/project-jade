@@ -1,11 +1,24 @@
 """Runner do benchmark: orquestra health check, isolamento e execução.
 
-Isolamento: durante toda a execução, `settings.NOTES_DIR` aponta para um
-diretório temporário. Isso protege de uma vez só o humor, o perfil do usuário e
-qualquer escrita de conversa — sem precisar restaurar valor a valor. As notas de
-estado reais são **copiadas** para lá, para o system prompt medido continuar
-realista. O índice do RAG **não** é isolado: ele lê o vault versionado do
-repositório, e é justamente isso que torna o recall@k reprodutível.
+Isolamento das notas: durante toda a execução, `settings.NOTES_DIR` aponta para
+um diretório temporário. Isso protege de uma vez só o humor, o perfil do usuário
+e qualquer escrita de conversa — sem precisar restaurar valor a valor. A
+personalidade e o perfil reais são **copiados** para lá, para o system prompt
+medido continuar realista; o humor, **não** — ele é semeado em nível 0 (ver
+`isolated_notes`).
+
+O índice do RAG **não** é isolado: o bench consulta o índice real. E o vault real
+não é só o repositório versionado — `obsidian_notes/` (as conversas privadas que
+a Jade escreve) faz parte do corpus por decisão de arquitetura, para que o
+histórico vire memória de longo prazo. Consequência direta: **o recall@k é
+específico da máquina** e varia conforme o usuário conversa; não compare o número
+entre ambientes diferentes.
+
+Isso **não** se conserta pondo `obsidian_notes` em `settings.VAULT_IGNORE` — isso
+quebraria a memória de longo prazo, que é uma feature deliberada (ver `CLAUDE.md`
+e `core/journal.py`). A correção certa é dar ao bench uma coleção Chroma própria,
+montada só com documentos rastreados pelo git; é mudança de desenho, para um
+subprojeto futuro.
 """
 
 from __future__ import annotations
@@ -29,6 +42,18 @@ from core.model_router import cloud_available
 _REPORTS_DIR = Path(__file__).parent / "reports"
 _CASES_DIR = Path(__file__).parent / "cases"
 
+#: Nota de humor semeada no diretório isolado. O formato é o mesmo que
+#: `core.mood._persist` grava; o que importa para `load_level()` é `nivel: 0`.
+_MOOD_SEED = (
+    "---\n"
+    "nivel: 0\n"
+    'humor: "neutra"\n'
+    "tags: [jade, humor]\n"
+    "---\n\n"
+    "# Jade — Humor\n\n"
+    "Humor semeado pelo benchmark em nível 0 (neutra).\n"
+)
+
 
 def health_check() -> None:
     """Confere que o Ollama responde. Falha rápido, com instrução acionável."""
@@ -47,14 +72,25 @@ def health_check() -> None:
 
 @contextlib.contextmanager
 def isolated_notes() -> Iterator[None]:
-    """Aponta `settings.NOTES_DIR` para um diretório temporário durante o bloco."""
+    """Aponta `settings.NOTES_DIR` para um diretório temporário durante o bloco.
+
+    Personalidade e perfil são **copiados** do vault real, para o system prompt
+    medido continuar realista. O humor, não: ele é **semeado em nível 0**.
+
+    O motivo é que `core.mood` limita o nível a `[-5, +5]`, e os casos de humor
+    medem a *direção* da variação. Copiando a nota real, um usuário cujo humor
+    persistido estivesse em -5 faria `humor-rudeza` render delta 0 ("neutral") e
+    falhar — por saturação do clamp, não por defeito no código. Semeando em 0, o
+    resultado é o mesmo em qualquer máquina e em qualquer `--repeat`.
+    """
     original = settings.NOTES_DIR
     temporario = Path(tempfile.mkdtemp(prefix="jade_bench_"))
-    for nota in (settings.PERSONALITY_NOTE, settings.MOOD_NOTE, settings.PROFILE_NOTE):
+    for nota in (settings.PERSONALITY_NOTE, settings.PROFILE_NOTE):
         origem = original / nota
         if origem.is_file():
             with contextlib.suppress(OSError):
                 shutil.copy2(origem, temporario / nota)
+    (temporario / settings.MOOD_NOTE).write_text(_MOOD_SEED, encoding="utf-8")
     settings.NOTES_DIR = temporario
     try:
         yield
@@ -185,9 +221,10 @@ def main(argv: list[str] | None = None) -> int:
     resumo["partial"] = False
     caminho = write(_REPORTS_DIR, resumo, resultados, tag=args.tag)
 
+    acerto_rota = resumo["route_accuracy"]
+    rota = f"{acerto_rota * 100:.1f}%" if acerto_rota is not None else "—"
     print(
-        f"\n✓ {resumo['ok']}/{resumo['evaluated']} caso(s) ok "
-        f"({resumo['route_accuracy'] * 100:.1f}% de acerto de rota)"
+        f"\n✓ {resumo['ok']}/{resumo['evaluated']} caso(s) aprovado(s) · {rota} de acerto de rota"
     )
     print(f"📄 Relatório: {caminho}")
     return 0

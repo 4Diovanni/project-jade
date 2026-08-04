@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 import bench.report as report_mod
-from bench.aggregate import Result
+from bench.aggregate import Failure, Result
 from bench.report import load_previous, render, write
 
 
@@ -16,8 +16,9 @@ def _resumo(**over):
         "failed": 1,
         "skipped": 0,
         "errored": 0,
+        "pass_rate": 0.5,
         "route_accuracy": 0.5,
-        "by_category": {"tools": {"total": 2, "ok": 1, "accuracy": 0.5}},
+        "by_category": {"tools": {"total": 2, "ok": 1, "pass_rate": 0.5}},
         "recall_at_k": 1.0,
         "context_precision": 0.0,
         "route_distribution": {"local": 2},
@@ -36,7 +37,7 @@ def _resultados():
             case_id="b",
             category="tools",
             status="falhou",
-            failures=["route: esperava 'cloud', veio 'local'"],
+            failures=[Failure("route", "esperava 'cloud', veio 'local'")],
         ),
     ]
 
@@ -46,6 +47,18 @@ def test_render_traz_as_metricas_principais():
     assert "Acerto de rota" in md
     assert "50" in md  # 50%
     assert "37.5" in md or "37,5" in md
+
+
+def test_render_rotula_o_denominador_de_cada_metrica():
+    """O dano do relatório antigo foi de rótulo, não só de conta: "Acerto" por
+    categoria era taxa de aprovação integral, e "Precisão de contexto" misturava
+    `context: none` com `context: any`. O texto agora tem que dizer qual é qual."""
+    md = render(_resumo(), _resultados())
+    assert "Precisão de contexto (casos `context: none`)" in md
+    assert "### Por categoria (aprovação integral do caso)" in md
+    assert "| Categoria | Aprovação | Casos |" in md
+    assert "Aprovação integral dos casos" in md
+    assert "Como ler" in md
 
 
 def test_render_lista_as_falhas_com_motivo():
@@ -112,7 +125,7 @@ def test_render_marca_metrica_ausente_com_traco():
         return encontradas[0]
 
     recall = _linha_de("Recall@k do RAG")
-    precisao = _linha_de("Precisão de contexto")
+    precisao = _linha_de("Precisão de contexto (casos `context: none`)")
     tps = _linha_de("Tokens/s (local)")
     p50 = _linha_de("Tokens de prompt p50")
     p95 = _linha_de("Tokens de prompt p95")
@@ -173,3 +186,33 @@ def test_load_previous_le_o_mais_recente(tmp_path):
         json.dumps(_resumo(route_accuracy=0.9)), encoding="utf-8"
     )
     assert load_previous(tmp_path)["route_accuracy"] == 0.9
+
+
+def test_load_previous_pula_relatorio_parcial(tmp_path):
+    """Uma execução interrompida grava um .json na mesma pasta. Se ele virasse a
+    base do delta, a próxima execução compararia contra uma população truncada —
+    sem nenhum aviso, já que o alerta de parcial só cobre o relatório atual."""
+    (tmp_path / "2026-01-01-000000-completo.json").write_text(
+        json.dumps(_resumo(route_accuracy=0.9, partial=False)), encoding="utf-8"
+    )
+    (tmp_path / "2099-01-01-000000-parcial.json").write_text(
+        json.dumps(_resumo(route_accuracy=0.1, partial=True)), encoding="utf-8"
+    )
+    anterior = load_previous(tmp_path)
+    assert anterior["route_accuracy"] == 0.9
+    assert anterior["partial"] is False
+
+
+def test_load_previous_devolve_none_se_so_ha_parciais(tmp_path):
+    (tmp_path / "2026-01-01-000000-parcial.json").write_text(
+        json.dumps(_resumo(partial=True)), encoding="utf-8"
+    )
+    assert load_previous(tmp_path) is None
+
+
+def test_load_previous_pula_json_ilegivel_e_segue_procurando(tmp_path):
+    (tmp_path / "2026-01-01-000000-bom.json").write_text(
+        json.dumps(_resumo(route_accuracy=0.7)), encoding="utf-8"
+    )
+    (tmp_path / "2099-01-01-000000-corrompido.json").write_text("{ não é json", encoding="utf-8")
+    assert load_previous(tmp_path)["route_accuracy"] == 0.7

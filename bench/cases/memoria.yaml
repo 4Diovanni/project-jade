@@ -1,5 +1,9 @@
-# Memória do vault. As fontes esperadas são arquivos VERSIONADOS no repositório
-# (o vault de leitura é a raiz do repo), então o recall@k é reprodutível.
+# Memória do vault. Toda fonte citada em `sources_include` precisa ser um
+# arquivo RASTREADO pelo git (o vault de leitura é a raiz do repo) — senão o
+# caso é impossível num clone limpo. Isso é necessário, mas não suficiente para
+# reprodutibilidade: `obsidian_notes/` (conversas privadas) também entra no
+# corpus do RAG e disputa o ranking, então o recall@k é específico da máquina.
+# Ver o docstring de `bench/runner.py`.
 - id: mem-modelo-local
   message: "qual modelo local o projeto usa?"
   expect: { route: local, sources_include: ["CLAUDE.md"] }

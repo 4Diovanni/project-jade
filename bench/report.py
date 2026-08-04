@@ -75,24 +75,42 @@ def render(
         separador = "|---|---|---|"
     linhas += [cabecalho, separador]
 
+    # Cada métrica é medida SÓ sobre a sua dimensão, e só nos casos que a
+    # declaram. O rótulo diz o denominador porque a confusão entre "acerto de
+    # rota" e "caso aprovado" já produziu um relatório que mentia.
     qualidade = [
-        ("Acerto de rota", summary["route_accuracy"], previous and previous.get("route_accuracy")),
-        ("Recall@k do RAG", summary["recall_at_k"], previous and previous.get("recall_at_k")),
-        (
-            "Precisão de contexto",
-            summary["context_precision"],
-            previous and previous.get("context_precision"),
-        ),
+        ("Acerto de rota", "route_accuracy"),
+        ("Recall@k do RAG", "recall_at_k"),
+        ("Precisão de contexto (casos `context: none`)", "context_precision"),
+        ("Aprovação integral dos casos", "pass_rate"),
     ]
-    for nome, atual, anterior in qualidade:
+    for nome, chave in qualidade:
+        atual = summary.get(chave)
         linha = f"| {nome} | {_pct(atual)} |"
         if previous:
-            linha += f" {_delta_pct(atual, anterior)} |"
+            linha += f" {_delta_pct(atual, previous.get(chave))} |"
         linhas.append(linha)
 
-    linhas += ["", "### Por categoria", "", "| Categoria | Acerto | Casos |", "|---|---|---|"]
+    linhas += [
+        "",
+        "> **Como ler:** cada métrica de qualidade cobre **apenas** os casos que declaram a "
+        "expectativa correspondente, e conta só as falhas **daquela** dimensão. Um caso que "
+        "roteia certo mas puxa contexto indevido conta como acerto de rota e erro de contexto. "
+        "*Acerto de rota* = casos com `route`. *Recall@k* = casos com `sources_include`. "
+        "*Precisão de contexto* = casos com `context: none` (os `context: any` medem cobertura, "
+        "não precisão). *Aprovação integral* = casos que passaram em **todas** as suas "
+        "expectativas.",
+    ]
+
+    linhas += [
+        "",
+        "### Por categoria (aprovação integral do caso)",
+        "",
+        "| Categoria | Aprovação | Casos |",
+        "|---|---|---|",
+    ]
     for categoria, dados in sorted(summary["by_category"].items()):
-        linhas.append(f"| {categoria} | {_pct(dados['accuracy'])} | {dados['total']} |")
+        linhas.append(f"| {categoria} | {_pct(dados['pass_rate'])} | {dados['total']} |")
 
     dist = summary["route_distribution"]
     linhas += [
@@ -135,7 +153,7 @@ def render(
     if falhas:
         linhas += ["", "## Casos que não passaram", ""]
         for r in falhas:
-            motivo = "; ".join(r.failures) or r.detail or r.status
+            motivo = "; ".join(str(f) for f in r.failures) or r.detail or r.status
             linhas.append(f"- **`{r.case_id}`** ({r.category}) — {r.status}: {motivo}")
 
     return "\n".join(linhas) + "\n"
@@ -147,17 +165,25 @@ def _stamp(tag: str) -> str:
 
 
 def load_previous(reports_dir: str | Path) -> dict | None:
-    """Carrega o resumo da execução anterior (o .json de nome mais recente)."""
+    """Carrega o resumo da execução completa mais recente.
+
+    Relatórios marcados `partial` são **pulados**: eles cobrem uma população
+    truncada (a execução foi interrompida no meio), e comparar contra eles
+    produziria um delta sem sentido — e sem aviso, já que o alerta de parcial só
+    é impresso para o relatório atual. Um relatório ilegível também é pulado, em
+    vez de zerar a comparação inteira.
+    """
     pasta = Path(reports_dir)
     if not pasta.is_dir():
         return None
-    arquivos = sorted(pasta.glob("*.json"))
-    if not arquivos:
-        return None
-    try:
-        return json.loads(arquivos[-1].read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
+    for arquivo in sorted(pasta.glob("*.json"), reverse=True):
+        try:
+            dados = json.loads(arquivo.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(dados, dict) and not dados.get("partial"):
+            return dados
+    return None
 
 
 def write(

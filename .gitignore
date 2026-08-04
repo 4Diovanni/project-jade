@@ -19,6 +19,9 @@
 !/projeto_jade_arquitetura.md
 !/CLAUDE.md
 !/COMO_USAR.md
+# Política de segurança do repositório público — precisa ser versionada (e o
+# bench cobra: todo arquivo citado em `sources_include` tem que existir no clone).
+!/SECURITY.md
 
 # Vault de memória do Jade (conversas .md + notas pessoais) — PRIVADO.
 /obsidian_notes/

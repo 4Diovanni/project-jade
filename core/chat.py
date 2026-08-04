@@ -151,12 +151,17 @@ class ChatSession:
     def send(self, message: str) -> str:
         """Processa uma mensagem: humor → tool → senão conversa (modelo + RAG)."""
         # 1) O tom do usuário ajusta o humor da Jade (persistido).
+        # `note` fica DENTRO do bloco: se `register()` falhar, `mood_level`
+        # continua 0 e anotá-lo mesmo assim inventaria um delta de humor contra o
+        # nível real de antes da mensagem. Sem anotação, quem lê sabe que não
+        # houve medida. `timed("mood")` segue por fora, para cronometrar a
+        # tentativa mesmo quando ela falha.
         mood_level = 0
         with timed("mood"), contextlib.suppress(Exception):
             from core.mood import register
 
             mood_level, _label = register(message)
-        note(mood_level=mood_level)
+            note(mood_level=mood_level)
 
         # 2) Roteamento para tools (as "mãos" da Jade).
         if self._use_tools:
