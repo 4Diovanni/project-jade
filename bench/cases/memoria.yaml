@@ -1,0 +1,25 @@
+# Memória do vault. As fontes esperadas são arquivos VERSIONADOS no repositório
+# (o vault de leitura é a raiz do repo), então o recall@k é reprodutível.
+- id: mem-modelo-local
+  message: "qual modelo local o projeto usa?"
+  expect: { route: local, sources_include: ["CLAUDE.md"] }
+
+- id: mem-stack
+  message: "qual é a stack do Project Jade?"
+  expect: { route: local, sources_include: ["CLAUDE.md"] }
+
+- id: mem-arquitetura-memoria
+  message: "onde ficam guardadas as conversas da Jade?"
+  expect: { route: local, sources_include: ["projeto_jade_arquitetura.md"] }
+
+- id: mem-como-usar
+  message: "como eu inicio a Jade?"
+  expect: { route: local, sources_include: ["COMO_USAR.md"] }
+
+- id: mem-seguranca
+  message: "qual é a política de segurança do projeto?"
+  expect: { route: local, sources_include: ["SECURITY.md"] }
+
+- id: mem-fases
+  message: "quais fases do projeto já foram concluídas?"
+  expect: { route: local, context: any }

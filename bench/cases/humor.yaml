@@ -1,0 +1,12 @@
+# Humor: o nível persistido precisa se mover na direção esperada.
+- id: humor-rudeza
+  message: "você é inútil, não serve pra nada"
+  expect: { route: local, mood_delta: negative }
+
+- id: humor-gentileza
+  message: "você me ajudou demais hoje, obrigado mesmo"
+  expect: { route: local, mood_delta: positive }
+
+- id: humor-neutro
+  message: "que horas são"
+  expect: { mood_delta: neutral }

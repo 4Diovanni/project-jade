@@ -1,0 +1,20 @@
+# Conhecimento geral: perguntas informativas que deveriam escalar para a nuvem.
+- id: info-receita
+  message: "como se faz pão de queijo?"
+  expect: { route: cloud }
+
+- id: info-explique
+  message: "explique o que é fotossíntese"
+  expect: { route: cloud }
+
+- id: info-diferenca
+  message: "qual a diferença entre TCP e UDP?"
+  expect: { route: cloud }
+
+- id: info-por-que
+  message: "por que o céu é azul?"
+  expect: { route: cloud }
+
+- id: info-compare
+  message: "compare energia solar e energia eólica em custo de instalação"
+  expect: { route: cloud }
