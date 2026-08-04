@@ -51,6 +51,15 @@ def render(
     linhas: list[str] = [
         f"# Benchmark da Jade — {quando}" + (f" · `{tag}`" if tag else ""),
         "",
+    ]
+    if summary.get("partial"):
+        linhas += [
+            "> ⚠️ **Execução parcial** — interrompida antes de terminar todos os "
+            "casos planejados. Números abaixo cobrem só o que rodou; não use "
+            "este relatório como baseline nem confie no delta contra ele.",
+            "",
+        ]
+    linhas += [
         f"{summary['evaluated']} caso(s) avaliado(s) · "
         f"{summary['ok']} ok · {summary['failed']} falhou · "
         f"{summary['skipped']} pulado · {summary['errored']} erro",

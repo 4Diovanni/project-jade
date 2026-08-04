@@ -3,9 +3,12 @@
 O laço e o isolamento são testados com a ChatSession mockada — sem Ollama.
 """
 
+import json
+
 import pytest
 
 import bench.runner as runner_mod
+from bench.aggregate import Result
 from bench.cases import Case
 from core.config import settings
 
@@ -66,6 +69,75 @@ def test_run_case_guarda_o_expect_para_a_agregacao(monkeypatch):
     monkeypatch.setattr(runner_mod, "ChatSession", lambda **k: FakeSession())
     r = runner_mod.run_case(_caso({"route": "local", "context": "none"}), cloud_ok=True)
     assert r.meta["_expect"] == {"route": "local", "context": "none"}
+
+
+def test_run_case_captura_falha_na_construcao_da_sessao(monkeypatch):
+    """Uma ChatSession que não sobe (ex.: Ollama caiu) não pode derrubar a suíte
+    inteira — antes desta correção, essa falha acontecia fora do `try` e
+    propagava para fora de `run_case`."""
+
+    def explode(**kwargs):
+        raise RuntimeError("modelo indisponível")
+
+    monkeypatch.setattr(runner_mod, "ChatSession", explode)
+    r = runner_mod.run_case(_caso({"route": "local"}), cloud_ok=True)
+    assert r.status == "erro"
+    assert "modelo indisponível" in r.detail
+    assert r.meta["_expect"] == {"route": "local"}
+
+
+def test_run_case_captura_falha_na_leitura_do_humor(monkeypatch):
+    """Idem para uma falha ao carregar o humor persistido (ex.: disco cheio)."""
+    monkeypatch.setattr(runner_mod, "ChatSession", lambda **k: FakeSession())
+
+    def explode():
+        raise OSError("disco cheio")
+
+    monkeypatch.setattr(runner_mod, "_mood_level", explode)
+    r = runner_mod.run_case(_caso({"route": "local"}), cloud_ok=True)
+    assert r.status == "erro"
+    assert "disco cheio" in r.detail
+    assert r.meta["_expect"] == {"route": "local"}
+
+
+def test_main_salva_relatorio_parcial_e_repropaga_interrupcao(monkeypatch, tmp_path):
+    """Ctrl-C no meio de uma execução longa não pode jogar fora os casos já
+    concluídos: o relatório parcial precisa ser gravado, marcado como parcial,
+    e a interrupção precisa continuar se propagando (nunca ser engolida)."""
+
+    class _FakeResponse:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(runner_mod, "urlopen", lambda *a, **k: _FakeResponse())
+    monkeypatch.setattr(runner_mod, "_REPORTS_DIR", tmp_path / "reports")
+
+    caso_yaml = tmp_path / "papo.yaml"
+    caso_yaml.write_text(
+        "- id: c1\n  message: oi\n  expect:\n    route: local\n"
+        "- id: c2\n  message: oi de novo\n  expect:\n    route: local\n",
+        encoding="utf-8",
+    )
+
+    def fake_run(cases, *, repeat=1, results=None):
+        # Simula 1 caso concluído antes da interrupção — o segundo nunca roda.
+        results.append(Result(case_id="c1", category="papo", status="ok", meta={"_expect": {}}))
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(runner_mod, "run", fake_run)
+
+    original_notes = settings.NOTES_DIR
+    with pytest.raises(KeyboardInterrupt):
+        runner_mod.main(["--cases", str(caso_yaml)])
+
+    # O isolamento de notas precisa ter sido restaurado mesmo com a interrupção.
+    assert settings.NOTES_DIR == original_notes
+
+    relatorios = list((tmp_path / "reports").glob("*.json"))
+    assert len(relatorios) == 1
+    dados = json.loads(relatorios[0].read_text(encoding="utf-8"))
+    assert dados["partial"] is True
+    assert dados["evaluated"] == 1
 
 
 def test_isolated_notes_troca_e_restaura(tmp_path):

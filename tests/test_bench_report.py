@@ -58,6 +58,28 @@ def test_render_sem_anterior_nao_mostra_delta():
     assert "Delta" not in md
 
 
+def test_render_sem_partial_nao_mostra_aviso():
+    md = render(_resumo(), _resultados())
+    assert "parcial" not in md.lower()
+
+
+def test_render_com_partial_mostra_aviso_no_topo():
+    md = render(_resumo(partial=True), _resultados())
+    linhas = md.splitlines()
+    # O aviso precisa aparecer perto do título, antes das métricas — não só em
+    # algum lugar qualquer do relatório.
+    indice_titulo = next(i for i, linha in enumerate(linhas) if linha.startswith("# Benchmark"))
+    indice_metricas = next(i for i, linha in enumerate(linhas) if "Qualidade das decisões" in linha)
+    indice_aviso = next(i for i, linha in enumerate(linhas) if "parcial" in linha.lower())
+    assert indice_titulo < indice_aviso < indice_metricas
+
+
+def test_write_grava_o_marcador_partial_no_json_gemeo(tmp_path):
+    caminho = write(tmp_path, _resumo(partial=True), _resultados())
+    gemeo = caminho.with_suffix(".json")
+    assert json.loads(gemeo.read_text(encoding="utf-8"))["partial"] is True
+
+
 def test_render_com_anterior_mostra_delta_com_sinal():
     anterior = _resumo(route_accuracy=0.25)
     md = render(_resumo(), _resultados(), previous=anterior)

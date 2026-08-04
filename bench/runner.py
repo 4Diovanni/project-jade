@@ -70,7 +70,14 @@ def _mood_level() -> int:
 
 
 def run_case(case: Case, *, cloud_ok: bool) -> Result:
-    """Executa um caso numa sessão nova e avalia o turno medido."""
+    """Executa um caso numa sessão nova e avalia o turno medido.
+
+    Tudo que pode falhar — leitura do humor, construção da `ChatSession`, o
+    `send()` e a própria avaliação — fica dentro do mesmo `try`. Sem isso, uma
+    falha na leitura do humor ou ao subir a sessão (ex.: Ollama caiu entre dois
+    casos) escapava de `run_case` sem virar `Result`, derrubando os casos
+    restantes em vez de só marcar este como "erro".
+    """
     if case.expect.get("route") == "cloud" and not cloud_ok:
         return Result(
             case_id=case.id,
@@ -80,11 +87,12 @@ def run_case(case: Case, *, cloud_ok: bool) -> Result:
             meta={"_expect": dict(case.expect)},
         )
 
-    antes = _mood_level()
-    session = ChatSession(use_journal=False)
     try:
+        antes = _mood_level()
+        session = ChatSession(use_journal=False)
         with capture() as turn:
             session.send(case.message)
+        status, falhas = evaluate(case, turn, mood_before=antes)
     except Exception as e:
         return Result(
             case_id=case.id,
@@ -94,7 +102,6 @@ def run_case(case: Case, *, cloud_ok: bool) -> Result:
             meta={"_expect": dict(case.expect)},
         )
 
-    status, falhas = evaluate(case, turn, mood_before=antes)
     meta = dict(turn.meta)
     meta["_expect"] = dict(case.expect)
     return Result(
@@ -107,10 +114,15 @@ def run_case(case: Case, *, cloud_ok: bool) -> Result:
     )
 
 
-def run(cases: list[Case], *, repeat: int = 1) -> list[Result]:
-    """Executa todos os casos `repeat` vezes. Um caso quebrado não derruba a suíte."""
+def run(cases: list[Case], *, repeat: int = 1, results: list[Result] | None = None) -> list[Result]:
+    """Executa todos os casos `repeat` vezes. Um caso quebrado não derruba a suíte.
+
+    `results`, se passado, é preenchido incrementalmente (em vez de só devolvido
+    no final): assim quem chama mantém os resultados já concluídos mesmo que o
+    laço seja interrompido por algo que `run_case` não captura (ex.: Ctrl-C).
+    """
     cloud_ok = cloud_available()
-    resultados: list[Result] = []
+    resultados: list[Result] = results if results is not None else []
     total = len(cases) * repeat
     feito = 0
     for _ in range(repeat):
@@ -148,10 +160,29 @@ def main(argv: list[str] | None = None) -> int:
     if not cloud_available():
         print("ℹ️  Sem ANTHROPIC_API_KEY: os casos de rota 'cloud' serão pulados.\n")
 
-    with isolated_notes():
-        resultados = run(cases, repeat=args.repeat)
+    total = len(cases) * args.repeat
+    resultados: list[Result] = []
+    try:
+        with isolated_notes():
+            run(cases, repeat=args.repeat, results=resultados)
+    except BaseException:
+        # Qualquer coisa que run_case não capturou (ex.: Ctrl-C no meio de um
+        # `send()`) chega aqui. Em vez de perder o trabalho já feito, gravamos
+        # o que existe — claramente marcado como parcial — e SÓ ENTÃO
+        # propagamos: silenciar um KeyboardInterrupt seria pior que perder o
+        # relatório.
+        print(
+            f"\n⚠️  Execução interrompida — {len(resultados)}/{total} caso(s) concluído(s). "
+            "Salvando o relatório parcial..."
+        )
+        resumo = summarize(resultados)
+        resumo["partial"] = True
+        caminho = write(_REPORTS_DIR, resumo, resultados, tag=args.tag)
+        print(f"📄 Relatório parcial: {caminho}")
+        raise
 
     resumo = summarize(resultados)
+    resumo["partial"] = False
     caminho = write(_REPORTS_DIR, resumo, resultados, tag=args.tag)
 
     print(

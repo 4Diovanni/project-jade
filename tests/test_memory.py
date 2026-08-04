@@ -35,6 +35,20 @@ def test_chunk_text():
     assert len(chunk_text(longo)) > 1
 
 
+def test_iter_vault_notes_pula_relatorios_do_benchmark(tmp_path):
+    """bench/reports/*.md nunca pode ser indexado: contaminaria o recall@k que o
+    próprio benchmark mede (ver core.config.settings.VAULT_IGNORE)."""
+    (tmp_path / "nota.md").write_text("conteúdo legítimo", encoding="utf-8")
+    reports = tmp_path / "bench" / "reports"
+    reports.mkdir(parents=True)
+    (reports / "2026-08-03-120000.md").write_text(
+        "relatório com sources_include e mensagens dos casos", encoding="utf-8"
+    )
+
+    encontrados = {p.name for p in iter_vault_notes(tmp_path)}
+    assert encontrados == {"nota.md"}
+
+
 def test_iter_inclui_txt_e_pula_notas_internas(tmp_path):
     (tmp_path / "doc.md").write_text("x", encoding="utf-8")
     (tmp_path / "notas.txt").write_text("y", encoding="utf-8")

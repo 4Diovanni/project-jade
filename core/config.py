@@ -150,6 +150,10 @@ class Settings:
         "interfaces",
         "tests",
         "scripts",
+        # Saída do benchmark (bench/reports/): indexar os relatórios contaminaria
+        # a própria métrica que o benchmark mede (recall@k infla ao "achar" as
+        # respostas esperadas de execuções passadas).
+        "bench",
         # Planos e specs de implementação (artefatos de processo). São longos e
         # sozinhos chegaram a 31% do índice, competindo com o resto. A Jade
         # conhece o projeto por README/CLAUDE/arquitetura, que ficam na raiz.
