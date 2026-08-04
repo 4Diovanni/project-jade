@@ -95,7 +95,7 @@ def test_rejeita_caso_sem_id(tmp_path):
 
 def test_rejeita_item_que_nao_e_mapeamento(tmp_path):
     arquivo = _escreve(tmp_path, "tools.yaml", '- "string ao invés de mapeamento"\n')
-    with pytest.raises(CaseError, match="mapeamento"):
+    with pytest.raises(CaseError, match="cada caso"):
         load_cases(arquivo)
 
 
@@ -103,7 +103,7 @@ def test_rejeita_expect_que_nao_e_mapeamento(tmp_path):
     arquivo = _escreve(
         tmp_path, "tools.yaml", '- id: x\n  message: "a"\n  expect: "string ao invés de dict"\n'
     )
-    with pytest.raises(CaseError, match="expect"):
+    with pytest.raises(CaseError, match="'expect' precisa"):
         load_cases(arquivo)
 
 
