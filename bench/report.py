@@ -133,7 +133,7 @@ def render(
 
 
 def _stamp(tag: str) -> str:
-    base = datetime.now().strftime("%Y-%m-%d-%H%M")
+    base = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     return f"{base}-{tag}" if tag else base
 
 

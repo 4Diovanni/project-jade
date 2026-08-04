@@ -1,7 +1,9 @@
 """Testes do relatório do benchmark (bench.report)."""
 
 import json
+from datetime import datetime
 
+import bench.report as report_mod
 from bench.aggregate import Result
 from bench.report import load_previous, render, write
 
@@ -64,8 +66,43 @@ def test_render_com_anterior_mostra_delta_com_sinal():
 
 
 def test_render_marca_metrica_ausente_com_traco():
-    md = render(_resumo(tokens_per_second=None, prompt_tokens=None), _resultados())
-    assert "—" in md
+    """O traço tem que aparecer na linha da métrica nula, não em qualquer lugar do texto.
+
+    O `—` também aparece incondicionalmente no título e nos motivos de falha, então
+    checar só `"—" in md` não prova nada sobre `_pct`/`_num`. Aqui isolamos a linha de
+    cada métrica nula e exigimos o traço nela — e, no negativo, que o valor "quebrado"
+    (0.0% / 0.0) que `_pct`/`_num` dariam se parassem de tratar `None` não apareça.
+    """
+    md = render(
+        _resumo(
+            recall_at_k=None,
+            context_precision=None,
+            tokens_per_second=None,
+            prompt_tokens=None,
+        ),
+        _resultados(),
+    )
+    linhas = md.splitlines()
+
+    def _linha_de(rotulo: str) -> str:
+        encontradas = [linha for linha in linhas if linha.startswith(f"| {rotulo} |")]
+        assert encontradas, f"linha da métrica {rotulo!r} não encontrada no relatório"
+        return encontradas[0]
+
+    recall = _linha_de("Recall@k do RAG")
+    precisao = _linha_de("Precisão de contexto")
+    tps = _linha_de("Tokens/s (local)")
+    p50 = _linha_de("Tokens de prompt p50")
+    p95 = _linha_de("Tokens de prompt p95")
+
+    for linha in (recall, precisao, tps, p50, p95):
+        assert "—" in linha
+
+    assert "0.0%" not in recall
+    assert "0.0%" not in precisao
+    assert "0.0" not in tps
+    assert "0.0" not in p50
+    assert "0.0" not in p95
 
 
 def test_write_grava_md_e_json(tmp_path):
@@ -76,6 +113,32 @@ def test_write_grava_md_e_json(tmp_path):
     assert gemeo.exists()
     assert json.loads(gemeo.read_text(encoding="utf-8"))["route_accuracy"] == 0.5
     assert "baseline" in caminho.name
+
+
+def test_write_duas_vezes_no_mesmo_minuto_nao_colide(tmp_path, monkeypatch):
+    """Duas gravações no mesmo minuto (segundos diferentes) não podem se sobrescrever.
+
+    Com `_stamp()` truncado em minutos, duas execuções dentro do mesmo minuto geravam
+    o mesmo nome de arquivo e a segunda `write()` apagava silenciosamente a primeira —
+    exatamente o cenário que a série histórica existe para evitar. Fixamos o relógio
+    para simular chamadas dentro do mesmo minuto, em segundos distintos, e conferimos
+    que cada `write()` produz seu próprio par `.md`/`.json`.
+    """
+    momentos = iter(datetime(2026, 1, 1, 12, 0, segundo) for segundo in range(4))
+
+    class _RelogioFixo(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return next(momentos)
+
+    monkeypatch.setattr(report_mod, "datetime", _RelogioFixo)
+
+    primeiro = write(tmp_path, _resumo(), _resultados())
+    segundo = write(tmp_path, _resumo(), _resultados())
+
+    assert primeiro != segundo
+    assert len(list(tmp_path.glob("*.md"))) == 2
+    assert len(list(tmp_path.glob("*.json"))) == 2
 
 
 def test_load_previous_devolve_none_em_pasta_vazia(tmp_path):
