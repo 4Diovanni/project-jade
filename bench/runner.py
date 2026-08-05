@@ -1,0 +1,230 @@
+"""Runner do benchmark: orquestra health check, isolamento e execução.
+
+Isolamento das notas: durante toda a execução, `settings.NOTES_DIR` aponta para
+um diretório temporário. Isso protege de uma vez só o humor, o perfil do usuário
+e qualquer escrita de conversa — sem precisar restaurar valor a valor. A
+personalidade e o perfil reais são **copiados** para lá, para o system prompt
+medido continuar realista; o humor, **não** — ele é semeado em nível 0 (ver
+`isolated_notes`).
+
+O índice do RAG **não** é isolado: o bench consulta o índice real. E o vault real
+não é só o repositório versionado — `obsidian_notes/` (as conversas privadas que
+a Jade escreve) faz parte do corpus por decisão de arquitetura, para que o
+histórico vire memória de longo prazo. Consequência direta: **o recall@k é
+específico da máquina** e varia conforme o usuário conversa; não compare o número
+entre ambientes diferentes.
+
+Isso **não** se conserta pondo `obsidian_notes` em `settings.VAULT_IGNORE` — isso
+quebraria a memória de longo prazo, que é uma feature deliberada (ver `CLAUDE.md`
+e `core/journal.py`). A correção certa é dar ao bench uma coleção Chroma própria,
+montada só com documentos rastreados pelo git; é mudança de desenho, para um
+subprojeto futuro.
+"""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import shutil
+import tempfile
+from collections.abc import Iterator
+from pathlib import Path
+from urllib.request import urlopen
+
+from bench.aggregate import Result, evaluate, summarize
+from bench.cases import Case, CaseError, load_cases
+from bench.report import write
+from core.chat import ChatSession
+from core.config import settings
+from core.metrics import capture
+from core.model_router import cloud_available
+
+_REPORTS_DIR = Path(__file__).parent / "reports"
+_CASES_DIR = Path(__file__).parent / "cases"
+
+#: Nota de humor semeada no diretório isolado. O formato é o mesmo que
+#: `core.mood._persist` grava; o que importa para `load_level()` é `nivel: 0`.
+_MOOD_SEED = (
+    "---\n"
+    "nivel: 0\n"
+    'humor: "neutra"\n'
+    "tags: [jade, humor]\n"
+    "---\n\n"
+    "# Jade — Humor\n\n"
+    "Humor semeado pelo benchmark em nível 0 (neutra).\n"
+)
+
+
+def health_check() -> None:
+    """Confere que o Ollama responde. Falha rápido, com instrução acionável."""
+    try:
+        # URL vem de settings.OLLAMA_BASE_URL (configuração local), não de
+        # entrada do usuário — nosec B310.
+        urlopen(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=2).close()  # nosec B310
+    except Exception as e:
+        raise RuntimeError(
+            f"Ollama não respondeu em {settings.OLLAMA_BASE_URL}.\n"
+            "  1. Garanta que o serviço do Ollama está rodando.\n"
+            f"  2. Baixe os modelos: ollama pull {settings.OLLAMA_MODEL} "
+            f"&& ollama pull {settings.OLLAMA_EMBED_MODEL}"
+        ) from e
+
+
+@contextlib.contextmanager
+def isolated_notes() -> Iterator[None]:
+    """Aponta `settings.NOTES_DIR` para um diretório temporário durante o bloco.
+
+    Personalidade e perfil são **copiados** do vault real, para o system prompt
+    medido continuar realista. O humor, não: ele é **semeado em nível 0**.
+
+    O motivo é que `core.mood` limita o nível a `[-5, +5]`, e os casos de humor
+    medem a *direção* da variação. Copiando a nota real, um usuário cujo humor
+    persistido estivesse em -5 faria `humor-rudeza` render delta 0 ("neutral") e
+    falhar — por saturação do clamp, não por defeito no código. Semeando em 0, o
+    resultado é o mesmo em qualquer máquina e em qualquer `--repeat`.
+    """
+    original = settings.NOTES_DIR
+    temporario = Path(tempfile.mkdtemp(prefix="jade_bench_"))
+    for nota in (settings.PERSONALITY_NOTE, settings.PROFILE_NOTE):
+        origem = original / nota
+        if origem.is_file():
+            with contextlib.suppress(OSError):
+                shutil.copy2(origem, temporario / nota)
+    (temporario / settings.MOOD_NOTE).write_text(_MOOD_SEED, encoding="utf-8")
+    settings.NOTES_DIR = temporario
+    try:
+        yield
+    finally:
+        settings.NOTES_DIR = original
+        shutil.rmtree(temporario, ignore_errors=True)
+
+
+def _mood_level() -> int:
+    from core.mood import load_level
+
+    return load_level()
+
+
+def run_case(case: Case, *, cloud_ok: bool) -> Result:
+    """Executa um caso numa sessão nova e avalia o turno medido.
+
+    Tudo que pode falhar — leitura do humor, construção da `ChatSession`, o
+    `send()` e a própria avaliação — fica dentro do mesmo `try`. Sem isso, uma
+    falha na leitura do humor ou ao subir a sessão (ex.: Ollama caiu entre dois
+    casos) escapava de `run_case` sem virar `Result`, derrubando os casos
+    restantes em vez de só marcar este como "erro".
+    """
+    if case.expect.get("route") == "cloud" and not cloud_ok:
+        return Result(
+            case_id=case.id,
+            category=case.category,
+            status="pulado",
+            detail="rota 'cloud' exige ANTHROPIC_API_KEY configurada",
+            meta={"_expect": dict(case.expect)},
+        )
+
+    try:
+        antes = _mood_level()
+        session = ChatSession(use_journal=False)
+        with capture() as turn:
+            session.send(case.message)
+        status, falhas = evaluate(case, turn, mood_before=antes)
+    except Exception as e:
+        return Result(
+            case_id=case.id,
+            category=case.category,
+            status="erro",
+            detail=f"{type(e).__name__}: {e}",
+            meta={"_expect": dict(case.expect)},
+        )
+
+    meta = dict(turn.meta)
+    meta["_expect"] = dict(case.expect)
+    return Result(
+        case_id=case.id,
+        category=case.category,
+        status=status,
+        failures=falhas,
+        steps=dict(turn.steps),
+        meta=meta,
+    )
+
+
+def run(cases: list[Case], *, repeat: int = 1, results: list[Result] | None = None) -> list[Result]:
+    """Executa todos os casos `repeat` vezes. Um caso quebrado não derruba a suíte.
+
+    `results`, se passado, é preenchido incrementalmente (em vez de só devolvido
+    no final): assim quem chama mantém os resultados já concluídos mesmo que o
+    laço seja interrompido por algo que `run_case` não captura (ex.: Ctrl-C).
+    """
+    cloud_ok = cloud_available()
+    resultados: list[Result] = results if results is not None else []
+    total = len(cases) * repeat
+    feito = 0
+    for _ in range(repeat):
+        for case in cases:
+            feito += 1
+            print(f"[{feito}/{total}] {case.id} … ", end="", flush=True)
+            resultado = run_case(case, cloud_ok=cloud_ok)
+            resultados.append(resultado)
+            print(resultado.status)
+    return resultados
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="python main.py bench",
+        description="Mede desempenho e qualidade das decisões da Jade.",
+    )
+    parser.add_argument("--repeat", type=int, default=1, help="repetições por caso (default: 1)")
+    parser.add_argument("--cases", default=str(_CASES_DIR), help="arquivo .yaml ou pasta de casos")
+    parser.add_argument("--tag", default="", help="rótulo no nome do relatório")
+    args = parser.parse_args(argv)
+
+    try:
+        health_check()
+    except RuntimeError as e:
+        print(f"❌ {e}")
+        return 1
+
+    try:
+        cases = load_cases(args.cases)
+    except CaseError as e:
+        print(f"❌ Caso inválido: {e}")
+        return 1
+
+    if not cloud_available():
+        print("ℹ️  Sem ANTHROPIC_API_KEY: os casos de rota 'cloud' serão pulados.\n")
+
+    total = len(cases) * args.repeat
+    resultados: list[Result] = []
+    try:
+        with isolated_notes():
+            run(cases, repeat=args.repeat, results=resultados)
+    except BaseException:
+        # Qualquer coisa que run_case não capturou (ex.: Ctrl-C no meio de um
+        # `send()`) chega aqui. Em vez de perder o trabalho já feito, gravamos
+        # o que existe — claramente marcado como parcial — e SÓ ENTÃO
+        # propagamos: silenciar um KeyboardInterrupt seria pior que perder o
+        # relatório.
+        print(
+            f"\n⚠️  Execução interrompida — {len(resultados)}/{total} caso(s) concluído(s). "
+            "Salvando o relatório parcial..."
+        )
+        resumo = summarize(resultados)
+        resumo["partial"] = True
+        caminho = write(_REPORTS_DIR, resumo, resultados, tag=args.tag)
+        print(f"📄 Relatório parcial: {caminho}")
+        raise
+
+    resumo = summarize(resultados)
+    resumo["partial"] = False
+    caminho = write(_REPORTS_DIR, resumo, resultados, tag=args.tag)
+
+    acerto_rota = resumo["route_accuracy"]
+    rota = f"{acerto_rota * 100:.1f}%" if acerto_rota is not None else "—"
+    print(
+        f"\n✓ {resumo['ok']}/{resumo['evaluated']} caso(s) aprovado(s) · {rota} de acerto de rota"
+    )
+    print(f"📄 Relatório: {caminho}")
+    return 0

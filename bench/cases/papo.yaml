@@ -1,0 +1,17 @@
+# Papo curto: deve ficar local e NÃO deveria puxar contexto do vault.
+# É aqui que a hipótese 1 do spec (RAG dispara sempre) fica visível.
+- id: papo-saudacao
+  message: "oi, tudo bem?"
+  expect: { route: local, context: none }
+
+- id: papo-agradecimento
+  message: "valeu, obrigado"
+  expect: { route: local, context: none }
+
+- id: papo-bom-dia
+  message: "bom dia"
+  expect: { route: local, context: none }
+
+- id: papo-tchau
+  message: "até mais tarde"
+  expect: { route: local, context: none }

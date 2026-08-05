@@ -8,6 +8,7 @@ os três ramos de resposta (tool, modelo local, Claude nuvem) com LLM e tools
 import pytest
 
 import core.chat as chat_mod
+from core import metrics
 from core.chat import ChatSession
 
 
@@ -161,3 +162,31 @@ def test_detach_limpa_na_hora_e_adia_o_trabalho_pesado(monkeypatch):
 
     finish()  # só agora (em background, na API) roda o trabalho pesado
     assert chamou["perfil"] is True
+
+
+# ── Instrumentação (core.metrics) ────────────────────────────
+def test_turno_local_registra_etapas_e_rota():
+    """A rota do modelo local mede humor, RAG e LLM, e anota route='local'."""
+    session = ChatSession(use_tools=False, use_rag=False, use_router=False, use_journal=False)
+    with metrics.capture() as turn:
+        session.send("oi")
+    assert turn.meta["route"] == "local"
+    assert {"mood", "llm", "journal", "total"} <= set(turn.steps)
+
+
+def test_turno_de_tool_registra_rota_e_nome(monkeypatch):
+    """Quando uma tool responde, route='tool' e o nome da tool é anotado."""
+    tool = FakeTool()
+    monkeypatch.setattr(chat_mod, "route", lambda _m: tool)
+    session = ChatSession(use_rag=False, use_router=False, use_journal=False)
+    with metrics.capture() as turn:
+        session.send("abra a calculadora")
+    assert turn.meta["route"] == "tool"
+    assert turn.meta["tool"] == "fake_tool"
+    assert {"tool_route", "tool_run"} <= set(turn.steps)
+
+
+def test_send_funciona_sem_capture():
+    """Fora de um capture(), send() se comporta exatamente como antes."""
+    session = ChatSession(use_tools=False, use_rag=False, use_router=False, use_journal=False)
+    assert session.send("oi") == "resposta do modelo"

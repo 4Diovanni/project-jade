@@ -58,9 +58,12 @@ Obsidian. Documento-fonte da arquitetura: `projeto_jade_arquitetura.md`.
 ## Qualidade & Segurança (obrigatório antes de commitar)
 Pipeline em `.github/workflows/` + `.pre-commit-config.yaml`. Rode localmente:
 - `ruff check . && ruff format .` — lint + formatação (config em `pyproject.toml`).
-- `bandit -c pyproject.toml -r core tools interfaces main.py` — SAST.
+- `bandit -c pyproject.toml -r core tools interfaces bench main.py` — SAST.
 - `pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-311` — vulnerabilidades de deps (a exceção é o CVE do servidor HTTP do ChromaDB, que não usamos; ver SECURITY.md).
 - `pytest` — testes de fumaça (não dependem do LLM/Ollama).
+- `python main.py bench` — benchmark de desempenho e qualidade das decisões
+  (exige Ollama; **não** roda no CI). Escreve `bench/reports/`, com delta contra
+  a execução anterior. Ver `docs/superpowers/specs/2026-08-03-regua-performance-jade-design.md`.
 
 Para swallow de exceção use `contextlib.suppress` (Bandit rejeita try/except/pass).
 Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-audit/gitleaks), `codeql.yml`.
@@ -109,6 +112,10 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
   incrementalmente (`.md`/`.txt`, por mtime, estado em `database/index_state.json`)
   arquivos novos/alterados na 1ª busca de cada sessão — largar arquivo no vault
   "só funciona". Notas internas da Jade (humor/perfil/personalidade) ficam fora do RAG.
+- **Régua de performance** (`core/metrics.py` + `bench/`): instrumentação por
+  etapa com custo zero fora do benchmark, e casos declarativos que medem as
+  **decisões** da Jade (rota, tool, recall@k do RAG) de forma determinística.
+  O baseline vive em `bench/reports/`.
 
 **Próximo:** Spotify e e-mail (Fase 4) · WhatsApp.
 

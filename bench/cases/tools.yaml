@@ -1,0 +1,21 @@
+# Tools — as "mãos" da Jade. Inclui NEGATIVOS: frases que parecem comando mas
+# não são, e que não podem acionar o controle do sistema.
+- id: tool-calculadora
+  message: "abra a calculadora"
+  expect: { route: tool, tool: system_control }
+
+- id: tool-bloco-de-notas
+  message: "abre o bloco de notas pra mim"
+  expect: { route: tool, tool: system_control }
+
+- id: tool-volume
+  message: "aumenta o volume"
+  expect: { route: tool, tool: system_control }
+
+- id: tool-negativo-coracao
+  message: "quero abrir meu coração e conversar com você"
+  expect: { route: local }
+
+- id: tool-negativo-abrir-empresa
+  message: "vale a pena abrir uma empresa no Brasil hoje?"
+  expect: { route: cloud }

@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install "bandit[toml]"
-      - run: bandit -c pyproject.toml -r core tools interfaces main.py
+      - run: bandit -c pyproject.toml -r core tools interfaces bench main.py
 
   pip-audit:
     name: pip-audit (dependências)

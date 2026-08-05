@@ -3,6 +3,8 @@
 Uso:
     python main.py            # sobe a API FastAPI (uvicorn)
     python main.py chat       # chat via terminal (Fase 1)
+    python main.py index      # (re)indexa o vault no RAG
+    python main.py bench      # mede desempenho e qualidade (ver bench/)
 """
 
 from __future__ import annotations
@@ -59,6 +61,13 @@ def run_index() -> None:
         )
         return
     print(f"✓ {n} nota(s) indexada(s) no ChromaDB (coleção '{settings.CHROMA_COLLECTION}').")
+
+
+def run_bench() -> int:
+    """Roda o benchmark da Jade e escreve o relatório em bench/reports/."""
+    from bench.runner import main as bench_main
+
+    return bench_main(sys.argv[2:])
 
 
 def run_cli() -> None:
@@ -150,5 +159,7 @@ if __name__ == "__main__":
         run_transcribe()
     elif command == "say":
         run_say()
+    elif command == "bench":
+        sys.exit(run_bench())
     else:
         run_api()

@@ -1,0 +1,29 @@
+# Memória do vault. Toda fonte citada em `sources_include` precisa ser um
+# arquivo RASTREADO pelo git (o vault de leitura é a raiz do repo) — senão o
+# caso é impossível num clone limpo. Isso é necessário, mas não suficiente para
+# reprodutibilidade: `obsidian_notes/` (conversas privadas) também entra no
+# corpus do RAG e disputa o ranking, então o recall@k é específico da máquina.
+# Ver o docstring de `bench/runner.py`.
+- id: mem-modelo-local
+  message: "qual modelo local o projeto usa?"
+  expect: { route: local, sources_include: ["CLAUDE.md"] }
+
+- id: mem-stack
+  message: "qual é a stack do Project Jade?"
+  expect: { route: local, sources_include: ["CLAUDE.md"] }
+
+- id: mem-arquitetura-memoria
+  message: "onde ficam guardadas as conversas da Jade?"
+  expect: { route: local, sources_include: ["projeto_jade_arquitetura.md"] }
+
+- id: mem-como-usar
+  message: "como eu inicio a Jade?"
+  expect: { route: local, sources_include: ["COMO_USAR.md"] }
+
+- id: mem-seguranca
+  message: "qual é a política de segurança do projeto?"
+  expect: { route: local, sources_include: ["SECURITY.md"] }
+
+- id: mem-fases
+  message: "quais fases do projeto já foram concluídas?"
+  expect: { route: local, context: any }
