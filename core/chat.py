@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import threading
+from collections.abc import Iterator
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
@@ -163,8 +164,10 @@ class ChatSession:
             return ""
         return "\n\n".join(chunks)
 
-    def send(self, message: str) -> str:
-        """Processa uma mensagem: humor → tool → senão conversa (modelo + RAG)."""
+    def _stream_impl(self, message: str) -> Iterator[str]:
+        """Gerador que produz a resposta token a token: humor → tool → senão
+        conversa (modelo + RAG). send() e stream() são os dois jeitos de
+        consumir este gerador — inteiro de uma vez, ou aos pedaços."""
         # 1) O tom do usuário ajusta o humor da Jade (persistido).
         # `note` fica DENTRO do bloco: se `register()` falhar, `mood_level`
         # continua 0 e anotá-lo mesmo assim inventaria um delta de humor contra o
@@ -190,11 +193,12 @@ class ChatSession:
                 except Exception as e:
                     text = f"Não consegui executar a ação: {e}"
                 self.last_model = "tool"
+                yield text
                 with timed("rag_sync"):
                     self._ensure_synced()
                 with timed("journal"):
                     self._record(message, text)
-                return text
+                return
 
         # 3) Conversa. Contexto do RAG é injetado só na chamada ao LLM.
         context = self._retrieve_context(message)
@@ -206,13 +210,26 @@ class ChatSession:
             user_turn = HumanMessage(content=augmented)
 
         messages = [self._system_message(mood_level), *self._history, user_turn]
+        full = None
         with timed("llm"):
-            response = llm.invoke(messages)
-        _note_llm_usage(response)
-        text = response.content if hasattr(response, "content") else str(response)
+            for chunk in llm.stream(messages):
+                full = chunk if full is None else full + chunk
+                if chunk.content:
+                    yield chunk.content
+        _note_llm_usage(full)
+        text = full.content if full is not None else ""
         with timed("journal"):
             self._record(message, text)
-        return text
+
+    def send(self, message: str) -> str:
+        """Processa uma mensagem e devolve a resposta inteira de uma vez.
+        Use stream() para consumi-la aos pedaços."""
+        return "".join(self._stream_impl(message))
+
+    def stream(self, message: str) -> Iterator[str]:
+        """Como send(), mas devolve a resposta aos pedaços conforme o LLM
+        gera (ou um único pedaço, no caso de uma tool)."""
+        return self._stream_impl(message)
 
     def _transcript(self) -> str:
         lines = []

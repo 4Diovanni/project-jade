@@ -16,7 +16,10 @@ from core.chat import ChatSession
 
 
 class FakeLLM:
-    """LLM falso: registra as mensagens recebidas e devolve um .content fixo."""
+    """LLM falso: registra as mensagens recebidas. invoke() devolve um
+    .content fixo; stream() fatia a mesma resposta em pedaços, simulando
+    geração incremental (com AIMessageChunk de verdade, para exercitar o
+    merge por + que _stream_impl usa)."""
 
     def __init__(self, reply: str = "resposta do modelo") -> None:
         self.reply = reply
@@ -25,6 +28,14 @@ class FakeLLM:
     def invoke(self, messages):
         self.calls.append(messages)
         return type("Msg", (), {"content": self.reply})()
+
+    def stream(self, messages):
+        self.calls.append(messages)
+        from langchain_core.messages import AIMessageChunk
+
+        meio = len(self.reply) // 2 or 1
+        yield AIMessageChunk(content=self.reply[:meio])
+        yield AIMessageChunk(content=self.reply[meio:], response_metadata={"eval_count": 7})
 
 
 class FakeTool:
@@ -302,3 +313,38 @@ def test_sync_vault_e_esperado_tambem_no_ramo_de_tool(monkeypatch):
     assert out == "tool executou"
     assert len(chamadas) == 1
     assert tool.ran_with == "execute tool"
+
+
+def test_stream_gera_multiplos_chunks_que_concatenam_igual_ao_send(monkeypatch):
+    """stream() devolve a mesma resposta que send(), só que em pedaços."""
+    monkeypatch.setattr(chat_mod, "route", lambda message: None)
+    monkeypatch.setattr(chat_mod, "cloud_available", lambda: False)
+    sess = _session(use_tools=False)
+
+    chunks = list(sess.stream("oi jade"))
+
+    assert len(chunks) > 1
+    assert "".join(chunks) == "resposta do modelo"
+    assert sess.last_model == "local"
+
+
+def test_stream_tool_devolve_um_unico_pedaco(monkeypatch):
+    tool = FakeTool()
+    monkeypatch.setattr(chat_mod, "route", lambda message: tool)
+    sess = _session()
+
+    chunks = list(sess.stream("abra a calculadora"))
+
+    assert chunks == ["tool executou"]
+    assert sess.last_model == "tool"
+
+
+def test_stream_grava_no_historico_como_send(monkeypatch):
+    """stream() tem os mesmos efeitos colaterais de send() (grava o turno)."""
+    monkeypatch.setattr(chat_mod, "route", lambda message: None)
+    monkeypatch.setattr(chat_mod, "cloud_available", lambda: False)
+    sess = _session(use_tools=False)
+
+    list(sess.stream("oi"))
+
+    assert len(sess._history) == 2
