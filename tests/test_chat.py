@@ -113,6 +113,40 @@ def test_send_pergunta_informativa_escala_para_a_nuvem(monkeypatch):
     assert sess.last_model == "claude"
 
 
+# ── RAG decide has_context (fim-a-fim, sem mockar choose_route) ──
+def test_send_sem_contexto_do_rag_alcanca_a_nuvem(monkeypatch):
+    """Com o RAG filtrando tudo (has_context=False), choose_route() DE VERDADE
+    (não mockado) escala para a nuvem numa pergunta informativa. Antes deste
+    subprojeto, query_memory() nunca devolvia [], então has_context nunca era
+    False e este caminho era impossível de exercitar — nenhuma mudança em
+    core/chat.py ou core/model_router.py foi necessária para isto passar."""
+    monkeypatch.setattr(chat_mod, "route", lambda message: None)
+    monkeypatch.setattr(chat_mod, "cloud_available", lambda: True)
+    monkeypatch.setattr("core.memory.sync_vault", lambda: 0)
+    monkeypatch.setattr("core.memory.query_memory", lambda message: [])
+    sess = _session(use_rag=True, use_tools=True)
+
+    out = sess.send("me explique o que é fotossíntese")
+
+    assert out == "resposta do modelo"
+    assert sess.last_model == "claude"
+
+
+def test_send_com_contexto_do_rag_fica_local_mesmo_informativa(monkeypatch):
+    """Regra de privacidade: contexto do RAG sempre trava a rota em local, mesmo
+    quando a pergunta parece informativa e a nuvem está disponível."""
+    monkeypatch.setattr(chat_mod, "route", lambda message: None)
+    monkeypatch.setattr(chat_mod, "cloud_available", lambda: True)
+    monkeypatch.setattr("core.memory.sync_vault", lambda: 0)
+    monkeypatch.setattr("core.memory.query_memory", lambda message: ["[nota.md]\ntrecho relevante"])
+    sess = _session(use_rag=True, use_tools=True)
+
+    out = sess.send("como foi a reunião que você anotou pra mim?")
+
+    assert out == "resposta do modelo"
+    assert sess.last_model == "local"
+
+
 # ── Memória / histórico ──
 def test_send_registra_o_turno_no_historico(monkeypatch):
     monkeypatch.setattr(chat_mod, "route", lambda message: None)
