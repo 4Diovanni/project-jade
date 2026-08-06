@@ -133,3 +133,36 @@ def test_merge_adjacent_chunks_nao_funde_fontes_diferentes():
 def test_merge_adjacent_chunks_sem_indice_passa_intocado():
     entries = [("trecho único", {"source": "nota.md"})]
     assert _merge_adjacent_chunks(entries) == ["[nota.md]\ntrecho único"]
+
+
+def test_query_memory_funde_chunks_adjacentes_da_mesma_fonte(monkeypatch):
+    """Chunks vizinhos (chunk 0 e 1) da mesma nota, com overlap, viram um bloco só."""
+
+    class FakeCollection:
+        def count(self):
+            return 2
+
+        def query(self, **kwargs):
+            return {
+                "documents": [
+                    [
+                        "isto é um chunk que termina em ABC",
+                        "ABC continua no próximo chunk",
+                    ]
+                ],
+                "metadatas": [
+                    [
+                        {"source": "nota.md", "chunk": 0},
+                        {"source": "nota.md", "chunk": 1},
+                    ]
+                ],
+            }
+
+    monkeypatch.setattr(memory, "_get_collection", lambda: FakeCollection())
+    monkeypatch.setattr(
+        memory, "_get_embedder", lambda: type("E", (), {"embed_query": lambda self, q: [0.1]})()
+    )
+
+    out = memory.query_memory("pergunta qualquer")
+
+    assert out == ["[nota.md]\nisto é um chunk que termina em ABC continua no próximo chunk"]

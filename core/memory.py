@@ -201,13 +201,9 @@ def query_memory(question: str, k: int | None = None) -> list[str]:
     docs = (res.get("documents") or [[]])[0]
     metas = (res.get("metadatas") or [[]])[0]
 
-    out: list[str] = []
-    sources: list[str] = []
-    for doc, meta in zip(docs, metas, strict=False):
-        source = (meta or {}).get("source", "?")
-        if source not in sources:
-            sources.append(source)
-        out.append(f"[{source}]\n{doc}")
+    entries = list(zip(docs, metas, strict=False))
+    out = _merge_adjacent_chunks(entries)
+    sources = list(dict.fromkeys((meta or {}).get("source", "?") for _doc, meta in entries))
     # As fontes vão para as métricas aqui, onde ainda são estruturadas — o bench
     # nunca deve reparsear as strings "[source]\n…" devolvidas.
     note(chunks=len(out), sources=sources)
