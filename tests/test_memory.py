@@ -5,7 +5,7 @@ Cobrem o filtro de notas do vault (privacidade) e o chunking.
 
 from core import memory
 from core.config import settings
-from core.memory import chunk_text, iter_vault_notes
+from core.memory import _merge_adjacent_chunks, _merge_overlap, chunk_text, iter_vault_notes
 
 
 def test_iter_vault_notes_pula_pastas_ignoradas(tmp_path):
@@ -91,3 +91,45 @@ def test_query_memory_registra_etapas_e_fontes(monkeypatch):
     assert {"rag_embed", "rag_search"} <= set(turn.steps)
     assert turn.meta["chunks"] == 2
     assert turn.meta["sources"] == ["CLAUDE.md"]  # sem repetição
+
+
+def test_merge_overlap_corta_sufixo_repetido():
+    a = "isto é um chunk que termina em ABC"
+    b = "ABC continua no próximo chunk"
+    assert _merge_overlap(a, b) == "isto é um chunk que termina em ABC continua no próximo chunk"
+
+
+def test_merge_overlap_sem_sobreposicao_concatena():
+    assert _merge_overlap("frase um", "frase dois") == "frase umfrase dois"
+
+
+def test_merge_adjacent_chunks_funde_pares_consecutivos():
+    entries = [
+        ("isto é um chunk que termina em ABC", {"source": "nota.md", "chunk": 0}),
+        ("ABC continua no próximo chunk", {"source": "nota.md", "chunk": 1}),
+    ]
+    out = _merge_adjacent_chunks(entries)
+    assert out == ["[nota.md]\nisto é um chunk que termina em ABC continua no próximo chunk"]
+
+
+def test_merge_adjacent_chunks_nao_funde_indices_nao_consecutivos():
+    entries = [
+        ("trecho A", {"source": "nota.md", "chunk": 0}),
+        ("trecho B", {"source": "nota.md", "chunk": 5}),
+    ]
+    out = _merge_adjacent_chunks(entries)
+    assert out == ["[nota.md]\ntrecho A", "[nota.md]\ntrecho B"]
+
+
+def test_merge_adjacent_chunks_nao_funde_fontes_diferentes():
+    entries = [
+        ("trecho A", {"source": "nota1.md", "chunk": 0}),
+        ("trecho A", {"source": "nota2.md", "chunk": 1}),
+    ]
+    out = _merge_adjacent_chunks(entries)
+    assert out == ["[nota1.md]\ntrecho A", "[nota2.md]\ntrecho A"]
+
+
+def test_merge_adjacent_chunks_sem_indice_passa_intocado():
+    entries = [("trecho único", {"source": "nota.md"})]
+    assert _merge_adjacent_chunks(entries) == ["[nota.md]\ntrecho único"]

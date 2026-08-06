@@ -56,6 +56,48 @@ def chunk_text(text: str) -> list[str]:
     return [c for c in splitter.split_text(text) if c.strip()]
 
 
+def _merge_overlap(a: str, b: str) -> str:
+    """Funde dois textos cortando o maior sufixo de `a` que é também prefixo de
+    `b`. Não assume tamanho fixo de overlap: o `RecursiveCharacterTextSplitter`
+    usado em `chunk_text()` respeita separadores e não garante
+    `RAG_CHUNK_OVERLAP` caracteres exatos entre chunks vizinhos."""
+    limit = min(len(a), len(b))
+    for size in range(limit, 0, -1):
+        if a[-size:] == b[:size]:
+            return a + b[size:]
+    return a + b
+
+
+def _merge_adjacent_chunks(entries: list[tuple[str, dict]]) -> list[str]:
+    """Funde chunks consecutivos (`chunk: i`, `chunk: i+1`) da MESMA fonte num
+    só bloco `[fonte]\\ntexto`, cortando o overlap. `entries` são pares
+    (doc, meta) já filtrados por distância, na ordem de relevância devolvida
+    pelo Chroma. Chunks não-adjacentes, de fontes diferentes, ou sem índice de
+    chunk nos metadados não se fundem."""
+    sources: list[str] = []
+    texts: list[str] = []
+    last_chunk: dict[str, tuple[int, int]] = {}  # fonte -> (índice do chunk, posição em texts)
+
+    for doc, meta in entries:
+        source = (meta or {}).get("source", "?")
+        raw_idx = (meta or {}).get("chunk")
+        chunk_idx = raw_idx if isinstance(raw_idx, int) else None
+
+        prev = last_chunk.get(source)
+        if chunk_idx is not None and prev is not None and prev[0] == chunk_idx - 1:
+            pos = prev[1]
+            texts[pos] = _merge_overlap(texts[pos], doc)
+            last_chunk[source] = (chunk_idx, pos)
+            continue
+
+        sources.append(source)
+        texts.append(doc)
+        if chunk_idx is not None:
+            last_chunk[source] = (chunk_idx, len(texts) - 1)
+
+    return [f"[{s}]\n{t}" for s, t in zip(sources, texts, strict=False)]
+
+
 def _get_embedder():
     global _embedder
     if _embedder is None:
