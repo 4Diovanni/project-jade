@@ -190,6 +190,8 @@ class ChatSession:
                 except Exception as e:
                     text = f"Não consegui executar a ação: {e}"
                 self.last_model = "tool"
+                with timed("rag_sync"):
+                    self._ensure_synced()
                 with timed("journal"):
                     self._record(message, text)
                 return text

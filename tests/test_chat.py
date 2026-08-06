@@ -272,3 +272,33 @@ def test_sync_vault_roda_em_background_e_e_esperado_na_1a_busca(monkeypatch):
     # 2ª busca não dispara sync_vault de novo.
     sess._retrieve_context("de novo")
     assert len(chamadas) == 1
+
+
+def test_sync_vault_e_esperado_tambem_no_ramo_de_tool(monkeypatch):
+    """O ramo de TOOL também espera a thread de sync terminar antes de retornar,
+    fechando a corrida de escrita no database/index_state.json quando múltiplas
+    sessões rodam em sequence (ex.: bench/runner.py com casos roteados a tool)."""
+    sync_terminou = threading.Event()
+    chamadas = []
+
+    def _fake_sync_vault():
+        chamadas.append("chamou")
+        time.sleep(0.05)
+        sync_terminou.set()
+        return 0
+
+    tool = FakeTool()
+    monkeypatch.setattr(chat_mod, "route", lambda message: tool)
+    monkeypatch.setattr("core.memory.sync_vault", _fake_sync_vault)
+
+    sess = _session(use_rag=True, use_tools=True)
+    # __init__ não bloqueou esperando o sync.
+    assert not sync_terminou.is_set()
+
+    out = sess.send("execute tool")
+
+    # send() retornou, e sync_terminou está setado (tool esperou a sync terminar).
+    assert sync_terminou.is_set()
+    assert out == "tool executou"
+    assert len(chamadas) == 1
+    assert tool.ran_with == "execute tool"
