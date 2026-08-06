@@ -13,6 +13,7 @@ extrai fatos duráveis sobre o usuário (`core.profile`).
 from __future__ import annotations
 
 import contextlib
+import threading
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
@@ -70,7 +71,14 @@ class ChatSession:
         self._journal: ConversationJournal | None = ConversationJournal() if enabled else None
         #: qual cérebro respondeu o último turno: "tool" | "local" | "claude"
         self.last_model: str | None = None
-        self._synced = False  # sincroniza o vault (arquivos novos) na 1ª busca
+        # Sincroniza o vault (arquivos novos/alterados) em background, desde a
+        # criação da sessão — não só antes da 1ª busca do RAG. Quando a sessão
+        # nasce bem antes da 1ª mensagem chegar (ex.: ao abrir a tela do chat,
+        # que conecta o WebSocket na hora), o custo desaparece na prática.
+        self._sync_thread: threading.Thread | None = None
+        if use_rag:
+            self._sync_thread = threading.Thread(target=self._sync_vault_safe, daemon=True)
+            self._sync_thread.start()
 
     @property
     def journal_path(self):
@@ -126,15 +134,21 @@ class ChatSession:
             with contextlib.suppress(Exception):
                 self._journal.record(message, text)
 
-    def _ensure_synced(self) -> None:
-        """Indexa arquivos novos/alterados do vault — uma vez por sessão."""
-        if self._synced:
-            return
-        self._synced = True
+    def _sync_vault_safe(self) -> None:
+        """Alvo da thread de sincronização — roda em background, blindado.
+        Exceções levantadas numa thread não propagam para quem dá join() nela,
+        então a proteção precisa estar aqui dentro, não em _ensure_synced()."""
         with contextlib.suppress(Exception):
             from core.memory import sync_vault
 
             sync_vault()
+
+    def _ensure_synced(self) -> None:
+        """Espera a sincronização em background terminar — custo zero se ela
+        já tiver terminado, espera o resto se ainda estiver rodando."""
+        if self._sync_thread is not None:
+            self._sync_thread.join()
+            self._sync_thread = None
 
     def _retrieve_context(self, message: str) -> str:
         if not self._use_rag:

@@ -5,6 +5,9 @@ os três ramos de resposta (tool, modelo local, Claude nuvem) com LLM e tools
 **mockados** — sem Ollama, sem rede e sem escrever no vault (CI-safe).
 """
 
+import threading
+import time
+
 import pytest
 
 import core.chat as chat_mod
@@ -239,3 +242,33 @@ def test_send_poda_historico_alem_do_limite(monkeypatch):
 
     # 5 turnos enviados, só os últimos 2 (4 mensagens) ficam no histórico.
     assert len(sess._history) == 4
+
+
+def test_sync_vault_roda_em_background_e_e_esperado_na_1a_busca(monkeypatch):
+    """A thread nasce no __init__ (não bloqueia a criação da sessão) e
+    _retrieve_context() só prossegue depois que ela termina."""
+    sync_terminou = threading.Event()
+    chamadas = []
+
+    def _fake_sync_vault():
+        chamadas.append("chamou")
+        time.sleep(0.05)
+        sync_terminou.set()
+        return 0
+
+    monkeypatch.setattr("core.memory.sync_vault", _fake_sync_vault)
+    monkeypatch.setattr("core.memory.query_memory", lambda message: [])
+
+    sess = _session(use_rag=True, use_tools=False)
+    # __init__ não bloqueou esperando o sync (senão sync_terminou já estaria setado).
+    assert not sync_terminou.is_set()
+
+    context = sess._retrieve_context("oi")
+
+    assert sync_terminou.is_set()
+    assert context == ""
+    assert len(chamadas) == 1
+
+    # 2ª busca não dispara sync_vault de novo.
+    sess._retrieve_context("de novo")
+    assert len(chamadas) == 1
