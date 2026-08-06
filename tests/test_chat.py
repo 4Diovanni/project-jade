@@ -224,3 +224,18 @@ def test_send_funciona_sem_capture():
     """Fora de um capture(), send() se comporta exatamente como antes."""
     session = ChatSession(use_tools=False, use_rag=False, use_router=False, use_journal=False)
     assert session.send("oi") == "resposta do modelo"
+
+
+def test_send_poda_historico_alem_do_limite(monkeypatch):
+    from core.config import settings
+
+    monkeypatch.setattr(chat_mod, "route", lambda message: None)
+    monkeypatch.setattr(chat_mod, "cloud_available", lambda: False)
+    monkeypatch.setattr(settings, "HISTORY_MAX_TURNS", 2)
+    sess = _session(use_tools=False)
+
+    for i in range(5):
+        sess.send(f"mensagem {i}")
+
+    # 5 turnos enviados, só os últimos 2 (4 mensagens) ficam no histórico.
+    assert len(sess._history) == 4

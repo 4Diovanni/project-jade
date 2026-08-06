@@ -121,6 +121,7 @@ class ChatSession:
     def _record(self, message: str, text: str) -> None:
         self._history.append(HumanMessage(content=message))
         self._history.append(AIMessage(content=text))
+        self._history = self._history[-2 * settings.HISTORY_MAX_TURNS :]
         if self._journal is not None:
             with contextlib.suppress(Exception):
                 self._journal.record(message, text)
