@@ -79,6 +79,12 @@ class Settings:
     # relevantes que ficavam logo abaixo do corte.
     RAG_TOP_K: int = int(os.getenv("RAG_TOP_K", "6"))
 
+    # Distância máxima (Chroma, espaço cosine — ver `_get_collection()`) para um
+    # trecho contar como contexto relevante. Acima disso, é descartado.
+    # Calibrado em bench/cases/papo.yaml (context: none) vs bench/cases/memoria.yaml
+    # (sources_include) — ver docs/superpowers/specs/2026-08-05-qualidade-rag-roteador-design.md.
+    RAG_MAX_DISTANCE: float = float(os.getenv("RAG_MAX_DISTANCE", "0.32"))
+
     # ── Voz (Fase 3) ──
     # STT local (faster-whisper): tiny|base|small|medium|large-v3
     WHISPER_MODEL: str = os.getenv("JADE_WHISPER_MODEL", "base")

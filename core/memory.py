@@ -56,6 +56,89 @@ def chunk_text(text: str) -> list[str]:
     return [c for c in splitter.split_text(text) if c.strip()]
 
 
+def _filter_by_distance(
+    docs: list[str], metas: list[dict], distances: list[float]
+) -> list[tuple[str, dict]]:
+    """Descarta trechos com distância maior que RAG_MAX_DISTANCE. Se o Chroma não
+    devolver distâncias (resposta sem a chave, ou lista vazia), mantém tudo —
+    nunca descarta contexto por um bug silencioso de parsing."""
+    if not distances:
+        return list(zip(docs, metas, strict=False))
+    return [
+        (doc, meta)
+        for doc, meta, dist in zip(docs, metas, distances, strict=False)
+        if dist <= settings.RAG_MAX_DISTANCE
+    ]
+
+
+def _merge_overlap(a: str, b: str) -> str:
+    """Funde dois textos cortando o maior sufixo de `a` que é também prefixo de
+    `b`. Não assume tamanho fixo de overlap: o `RecursiveCharacterTextSplitter`
+    usado em `chunk_text()` respeita separadores e não garante
+    `RAG_CHUNK_OVERLAP` caracteres exatos entre chunks vizinhos."""
+    limit = min(len(a), len(b))
+    for size in range(limit, 0, -1):
+        if a[-size:] == b[:size]:
+            return a + b[size:]
+    return a + b
+
+
+def _flush_run(
+    run: list[tuple[int, str, int]], source: str, blocks: list[tuple[int, str, str]]
+) -> None:
+    """Funde um run de chunks consecutivos (já ordenados por índice) num único
+    bloco, e o acrescenta a `blocks` na melhor (menor) posição de relevância
+    do run — para não bagunçar a ordenação original do Chroma."""
+    if not run:
+        return
+    best_pos = min(pos for pos, _doc, _idx in run)
+    text = run[0][1]
+    for _pos, doc, _idx in run[1:]:
+        text = _merge_overlap(text, doc)
+    blocks.append((best_pos, source, text))
+
+
+def _merge_adjacent_chunks(entries: list[tuple[str, dict]]) -> list[str]:
+    """Funde chunks consecutivos (`chunk: i`, `chunk: i+1`) da MESMA fonte num
+    só bloco `[fonte]\\ntexto`, cortando o overlap. `entries` são pares
+    (doc, meta) na ordem de relevância devolvida pelo Chroma — uma ordem que
+    NÃO segue o índice do chunk (o chunk `i+1` pode aparecer antes do chunk
+    `i`, ou uma cadeia de 3+ chunks pode chegar embaralhada). Por isso
+    agrupamos por fonte e ordenamos por `chunk` ANTES de fundir runs
+    consecutivos, em vez de só comparar com o item anterior da lista bruta.
+    Cada bloco fundido herda a melhor posição de relevância entre os chunks
+    que o compõem, para preservar a ordem de relevância geral na saída.
+    Chunks não-adjacentes, de fontes diferentes, ou sem índice de chunk nos
+    metadados não se fundem."""
+    groups: dict[str, list[tuple[int, str, int | None]]] = {}
+    for pos, (doc, meta) in enumerate(entries):
+        source = (meta or {}).get("source", "?")
+        raw_idx = (meta or {}).get("chunk")
+        chunk_idx = raw_idx if isinstance(raw_idx, int) else None
+        groups.setdefault(source, []).append((pos, doc, chunk_idx))
+
+    blocks: list[tuple[int, str, str]] = []  # (melhor posição de relevância, fonte, texto)
+
+    for source, items in groups.items():
+        com_indice = sorted((it for it in items if it[2] is not None), key=lambda it: it[2])
+        sem_indice = [it for it in items if it[2] is None]
+
+        run: list[tuple[int, str, int]] = []
+        for it in com_indice:
+            if run and it[2] == run[-1][2] + 1:
+                run.append(it)
+            else:
+                _flush_run(run, source, blocks)
+                run = [it]
+        _flush_run(run, source, blocks)
+
+        for pos, doc, _idx in sem_indice:
+            blocks.append((pos, source, doc))
+
+    blocks.sort(key=lambda b: b[0])
+    return [f"[{s}]\n{t}" for _pos, s, t in blocks]
+
+
 def _get_embedder():
     global _embedder
     if _embedder is None:
@@ -154,18 +237,28 @@ def query_memory(question: str, k: int | None = None) -> list[str]:
     with timed("rag_embed"):
         q_emb = _get_embedder().embed_query(question)
     with timed("rag_search"):
-        res = collection.query(query_embeddings=[q_emb], n_results=k)
+        # `include` é explícito (não o default do Chroma): o contrato de que
+        # "distances" sempre volta fica fixado no código, não dependente de
+        # um default externo que pode mudar num upgrade de dependência e
+        # transformar `_filter_by_distance` num no-op silencioso.
+        res = collection.query(
+            query_embeddings=[q_emb], n_results=k, include=["documents", "metadatas", "distances"]
+        )
 
     docs = (res.get("documents") or [[]])[0]
     metas = (res.get("metadatas") or [[]])[0]
+    distances = (res.get("distances") or [[]])[0]
 
-    out: list[str] = []
-    sources: list[str] = []
-    for doc, meta in zip(docs, metas, strict=False):
-        source = (meta or {}).get("source", "?")
-        if source not in sources:
-            sources.append(source)
-        out.append(f"[{source}]\n{doc}")
+    if docs and not distances:
+        # Defensivo: `include` pediu "distances" explicitamente, então chegar
+        # aqui sem elas é uma resposta fora do contrato esperado (ex.: um
+        # mock de teste incompleto, ou uma API do Chroma que mudou). Fica
+        # observável no bench em vez de silenciosamente desativar o filtro.
+        note(rag_distances_missing=True)
+
+    entries = _filter_by_distance(docs, metas, distances)
+    out = _merge_adjacent_chunks(entries)
+    sources = list(dict.fromkeys((meta or {}).get("source", "?") for _doc, meta in entries))
     # As fontes vão para as métricas aqui, onde ainda são estruturadas — o bench
     # nunca deve reparsear as strings "[source]\n…" devolvidas.
     note(chunks=len(out), sources=sources)
