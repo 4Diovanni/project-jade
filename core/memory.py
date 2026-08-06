@@ -56,6 +56,21 @@ def chunk_text(text: str) -> list[str]:
     return [c for c in splitter.split_text(text) if c.strip()]
 
 
+def _filter_by_distance(
+    docs: list[str], metas: list[dict], distances: list[float]
+) -> list[tuple[str, dict]]:
+    """Descarta trechos com distância maior que RAG_MAX_DISTANCE. Se o Chroma não
+    devolver distâncias (resposta sem a chave, ou lista vazia), mantém tudo —
+    nunca descarta contexto por um bug silencioso de parsing."""
+    if not distances:
+        return list(zip(docs, metas, strict=False))
+    return [
+        (doc, meta)
+        for doc, meta, dist in zip(docs, metas, distances, strict=False)
+        if dist <= settings.RAG_MAX_DISTANCE
+    ]
+
+
 def _merge_overlap(a: str, b: str) -> str:
     """Funde dois textos cortando o maior sufixo de `a` que é também prefixo de
     `b`. Não assume tamanho fixo de overlap: o `RecursiveCharacterTextSplitter`
@@ -200,8 +215,9 @@ def query_memory(question: str, k: int | None = None) -> list[str]:
 
     docs = (res.get("documents") or [[]])[0]
     metas = (res.get("metadatas") or [[]])[0]
+    distances = (res.get("distances") or [[]])[0]
 
-    entries = list(zip(docs, metas, strict=False))
+    entries = _filter_by_distance(docs, metas, distances)
     out = _merge_adjacent_chunks(entries)
     sources = list(dict.fromkeys((meta or {}).get("source", "?") for _doc, meta in entries))
     # As fontes vão para as métricas aqui, onde ainda são estruturadas — o bench

@@ -166,3 +166,47 @@ def test_query_memory_funde_chunks_adjacentes_da_mesma_fonte(monkeypatch):
     out = memory.query_memory("pergunta qualquer")
 
     assert out == ["[nota.md]\nisto é um chunk que termina em ABC continua no próximo chunk"]
+
+
+def test_filter_by_distance_descarta_acima_do_limiar(monkeypatch):
+    monkeypatch.setattr(settings, "RAG_MAX_DISTANCE", 0.5)
+    docs = ["perto", "longe"]
+    metas = [{"source": "a.md"}, {"source": "b.md"}]
+    distances = [0.3, 0.9]
+    out = memory._filter_by_distance(docs, metas, distances)
+    assert out == [("perto", {"source": "a.md"})]
+
+
+def test_filter_by_distance_mantem_no_limite_exato(monkeypatch):
+    monkeypatch.setattr(settings, "RAG_MAX_DISTANCE", 0.5)
+    out = memory._filter_by_distance(["x"], [{"source": "a.md"}], [0.5])
+    assert out == [("x", {"source": "a.md"})]
+
+
+def test_filter_by_distance_sem_distancias_mantem_tudo():
+    out = memory._filter_by_distance(["a", "b"], [{"source": "x"}, {"source": "y"}], [])
+    assert out == [("a", {"source": "x"}), ("b", {"source": "y"})]
+
+
+def test_query_memory_filtra_por_distancia_e_pode_ficar_vazio(monkeypatch):
+    """Com todos os trechos acima do limiar, query_memory devolve [] — has_context
+    vira False a jusante em core.chat, o que hoje é estruturalmente impossível."""
+    monkeypatch.setattr(settings, "RAG_MAX_DISTANCE", 0.2)
+
+    class FakeCollection:
+        def count(self):
+            return 1
+
+        def query(self, **kwargs):
+            return {
+                "documents": [["trecho irrelevante"]],
+                "metadatas": [[{"source": "nota.md", "chunk": 0}]],
+                "distances": [[0.9]],
+            }
+
+    monkeypatch.setattr(memory, "_get_collection", lambda: FakeCollection())
+    monkeypatch.setattr(
+        memory, "_get_embedder", lambda: type("E", (), {"embed_query": lambda self, q: [0.1]})()
+    )
+
+    assert memory.query_memory("pergunta qualquer") == []
