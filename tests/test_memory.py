@@ -135,6 +135,31 @@ def test_merge_adjacent_chunks_sem_indice_passa_intocado():
     assert _merge_adjacent_chunks(entries) == ["[nota.md]\ntrecho único"]
 
 
+def test_merge_adjacent_chunks_funde_quando_chunk_seguinte_vem_antes():
+    """O Chroma devolve por relevância, não por índice de chunk: o chunk 1 pode
+    aparecer ANTES do chunk 0 na lista `entries`. A fusão tem que funcionar nos
+    dois sentidos, senão o overlap fica duplicado no prompt sem gerar erro."""
+    entries = [
+        ("ABC continua no próximo chunk", {"source": "nota.md", "chunk": 1}),
+        ("isto é um chunk que termina em ABC", {"source": "nota.md", "chunk": 0}),
+    ]
+    out = _merge_adjacent_chunks(entries)
+    assert out == ["[nota.md]\nisto é um chunk que termina em ABC continua no próximo chunk"]
+
+
+def test_merge_adjacent_chunks_funde_cadeia_de_tres_em_ordem_embaralhada():
+    """Cadeia de 3 chunks consecutivos (0, 1, 2) da mesma fonte, chegando na
+    ordem 2, 0, 1 — nem ascendente nem descendente. Prova que a fusão não
+    depende de nenhuma ordem de chegada específica, só do índice do chunk."""
+    entries = [
+        ("cinco seis sete", {"source": "nota.md", "chunk": 2}),
+        ("um dois tres", {"source": "nota.md", "chunk": 0}),
+        ("tres quatro cinco", {"source": "nota.md", "chunk": 1}),
+    ]
+    out = _merge_adjacent_chunks(entries)
+    assert out == ["[nota.md]\num dois tres quatro cinco seis sete"]
+
+
 def test_query_memory_funde_chunks_adjacentes_da_mesma_fonte(monkeypatch):
     """Chunks vizinhos (chunk 0 e 1) da mesma nota, com overlap, viram um bloco só."""
 
@@ -186,6 +211,66 @@ def test_filter_by_distance_mantem_no_limite_exato(monkeypatch):
 def test_filter_by_distance_sem_distancias_mantem_tudo():
     out = memory._filter_by_distance(["a", "b"], [{"source": "x"}, {"source": "y"}], [])
     assert out == [("a", {"source": "x"}), ("b", {"source": "y"})]
+
+
+def test_query_memory_passa_include_explicito_para_o_chroma(monkeypatch):
+    """`include` não pode depender do default do Chroma: se um upgrade de
+    dependência mudar esse default, o filtro por distância vira um no-op
+    silencioso. Fixamos o contrato explicitamente na chamada."""
+    from core import metrics
+
+    captured_kwargs: dict = {}
+
+    class FakeCollection:
+        def count(self):
+            return 1
+
+        def query(self, **kwargs):
+            captured_kwargs.update(kwargs)
+            return {
+                "documents": [["trecho"]],
+                "metadatas": [[{"source": "nota.md", "chunk": 0}]],
+                "distances": [[0.1]],
+            }
+
+    monkeypatch.setattr(memory, "_get_collection", lambda: FakeCollection())
+    monkeypatch.setattr(
+        memory, "_get_embedder", lambda: type("E", (), {"embed_query": lambda self, q: [0.1]})()
+    )
+
+    with metrics.capture():
+        memory.query_memory("pergunta qualquer")
+
+    assert captured_kwargs.get("include") == ["documents", "metadatas", "distances"]
+
+
+def test_query_memory_observa_quando_distances_ausente(monkeypatch):
+    """Se `documents` vier mas `distances` não, isso é uma degradação do
+    contrato esperado (ver _filter_by_distance) — precisa ficar observável no
+    bench, não silenciosamente mascarada."""
+    from core import metrics
+
+    class FakeCollection:
+        def count(self):
+            return 1
+
+        def query(self, **kwargs):
+            return {
+                "documents": [["trecho"]],
+                "metadatas": [[{"source": "nota.md", "chunk": 0}]],
+                # sem "distances" de propósito
+            }
+
+    monkeypatch.setattr(memory, "_get_collection", lambda: FakeCollection())
+    monkeypatch.setattr(
+        memory, "_get_embedder", lambda: type("E", (), {"embed_query": lambda self, q: [0.1]})()
+    )
+
+    with metrics.capture() as turn:
+        out = memory.query_memory("pergunta qualquer")
+
+    assert out == ["[nota.md]\ntrecho"]  # sem distances, mantém tudo (defensivo)
+    assert turn.meta["rag_distances_missing"] is True
 
 
 def test_query_memory_filtra_por_distancia_e_pode_ficar_vazio(monkeypatch):
