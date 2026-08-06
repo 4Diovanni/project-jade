@@ -56,3 +56,6 @@ npm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Worktrees locais (execução isolada de planos via subagent-driven-development)
+.worktrees/
