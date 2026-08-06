@@ -431,6 +431,8 @@ Trocar (o método `send` inteiro, do `def send` até o `return text` final):
                 except Exception as e:
                     text = f"Não consegui executar a ação: {e}"
                 self.last_model = "tool"
+                with timed("rag_sync"):
+                    self._ensure_synced()
                 with timed("journal"):
                     self._record(message, text)
                 return text
@@ -453,6 +455,14 @@ Trocar (o método `send` inteiro, do `def send` até o `return text` final):
             self._record(message, text)
         return text
 ```
+
+**Nota (fix da Task 2):** o `with timed("rag_sync"): self._ensure_synced()`
+no ramo de tool acima não estava no desenho original — foi acrescentado
+depois de uma revisão encontrar uma corrida real (thread de `sync_vault`
+órfã quando o turno é roteado para tool, especialmente visível em
+`bench/runner.py`, que cria uma `ChatSession` por caso sobre o mesmo índice
+real). Ver o ledger da Task 2. Este "De:" já reflete o estado real do
+arquivo depois do fix — copie-o como está.
 
 Por:
 
@@ -487,6 +497,8 @@ Por:
                     text = f"Não consegui executar a ação: {e}"
                 self.last_model = "tool"
                 yield text
+                with timed("rag_sync"):
+                    self._ensure_synced()
                 with timed("journal"):
                     self._record(message, text)
                 return
