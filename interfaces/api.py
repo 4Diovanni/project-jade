@@ -8,9 +8,18 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    File,
+    HTTPException,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -35,6 +44,54 @@ def _get_session() -> ChatSession:
     if _session is None:
         _session = ChatSession()
     return _session
+
+
+async def _stream_to_ws(websocket: WebSocket, session: ChatSession, message: str) -> bool:
+    """Drena session.stream() (síncrono) numa thread e repassa cada pedaço
+    pro WebSocket assim que chega — a ponte entre o mundo síncrono do
+    ChatSession e o event loop assíncrono do FastAPI. Devolve True se o
+    turno terminou sem erro (o chamador manda "done" só nesse caso)."""
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+    sentinel = object()
+
+    def _produce() -> None:
+        try:
+            for chunk in session.stream(message):
+                loop.call_soon_threadsafe(queue.put_nowait, chunk)
+        except Exception as e:
+            loop.call_soon_threadsafe(queue.put_nowait, e)
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, sentinel)
+
+    threading.Thread(target=_produce, daemon=True).start()
+    while (item := await queue.get()) is not sentinel:
+        if isinstance(item, Exception):
+            await websocket.send_json({"type": "error", "detail": str(item)})
+            return False
+        await websocket.send_json({"type": "token", "text": item})
+    return True
+
+
+@app.websocket("/ws/chat")
+async def ws_chat(websocket: WebSocket) -> None:
+    await websocket.accept()
+    session = _get_session()
+    try:
+        while True:
+            data = await websocket.receive_json()
+            async with _session_lock:
+                ok = await _stream_to_ws(websocket, session, data["message"])
+            if ok:
+                await websocket.send_json(
+                    {
+                        "type": "done",
+                        "model": session.last_model,
+                        "conversation_id": session.conversation_id,
+                    }
+                )
+    except WebSocketDisconnect:
+        pass
 
 
 class ChatRequest(BaseModel):

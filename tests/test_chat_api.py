@@ -86,3 +86,49 @@ def test_lock_serializa_chamadas_concorrentes(monkeypatch):
         ["inicio:A", "fim:A", "inicio:B", "fim:B"],
         ["inicio:B", "fim:B", "inicio:A", "fim:A"],
     )
+
+
+def test_ws_chat_envia_tokens_e_termina_com_done():
+    client = TestClient(api_mod.app)
+
+    with client.websocket_connect("/ws/chat") as ws:
+        ws.send_json({"message": "oi, tudo bem?"})
+
+        eventos = []
+        while True:
+            evento = ws.receive_json()
+            eventos.append(evento)
+            if evento["type"] == "done":
+                break
+
+    tipos = [e["type"] for e in eventos]
+    assert tipos[-1] == "done"
+    assert tipos.count("token") >= 1
+    texto = "".join(e["text"] for e in eventos if e["type"] == "token")
+    assert texto == "resposta da api"
+    assert eventos[-1]["model"] == "local"
+
+
+def test_ws_chat_erro_no_meio_nao_derruba_a_conexao(monkeypatch):
+    """Um erro num turno vira {"type": "error"} (sem "done" depois) — a
+    conexão continua aberta para a próxima mensagem."""
+
+    def _stream_com_erro(self, message):
+        if message == "explode":
+            raise RuntimeError("boom")
+        yield "ok"
+
+    monkeypatch.setattr(chat_mod.ChatSession, "stream", _stream_com_erro)
+    client = TestClient(api_mod.app)
+
+    with client.websocket_connect("/ws/chat") as ws:
+        ws.send_json({"message": "explode"})
+        erro = ws.receive_json()
+        assert erro == {"type": "error", "detail": "boom"}
+
+        # a conexão sobrevive: a próxima mensagem funciona normalmente.
+        ws.send_json({"message": "oi"})
+        tok = ws.receive_json()
+        assert tok == {"type": "token", "text": "ok"}
+        fim = ws.receive_json()
+        assert fim["type"] == "done"
