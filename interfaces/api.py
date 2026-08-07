@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -24,6 +25,9 @@ logger = logging.getLogger(__name__)
 # Fase 1: uma única sessão de conversa (assistente pessoal = 1 usuário local).
 # A sessão é criada de forma preguiçosa para a API subir mesmo sem o LLM pronto.
 _session: ChatSession | None = None
+# Serializa qualquer combinação de /chat, /ws/chat e /voice/chat — sem isto,
+# duas requisições concorrentes corrompem o _history compartilhado.
+_session_lock = asyncio.Lock()
 
 
 def _get_session() -> ChatSession:
@@ -43,10 +47,11 @@ def health() -> dict:
 
 
 @app.post("/chat")
-def chat(req: ChatRequest, background: BackgroundTasks) -> dict:
+async def chat(req: ChatRequest, background: BackgroundTasks) -> dict:
     session = _get_session()
     try:
-        reply = session.send(req.message)
+        async with _session_lock:
+            reply = await asyncio.to_thread(session.send, req.message)
     except Exception as e:  # provider fora do ar, chave faltando, etc.
         # O detalhe do erro vai para o log do servidor, não para o cliente
         # (evita expor stack trace/implementação na resposta HTTP).
@@ -228,7 +233,8 @@ async def voice_chat(file: UploadFile = File(...)) -> dict:
     try:
         transcription = transcribe(tmp)
         session = _get_session()
-        reply = session.send(transcription)
+        async with _session_lock:
+            reply = await asyncio.to_thread(session.send, transcription)
         audio_path = synthesize_reply(reply)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Falha no voice chat: {e}") from e
