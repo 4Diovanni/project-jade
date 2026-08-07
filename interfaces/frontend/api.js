@@ -15,14 +15,18 @@ export function _handleChatEvent(data, { onToken, onDone, onError } = {}) {
   else if (data.type === "error") onError?.(data.detail);
 }
 
-export function connectChat({ onToken, onDone, onError, onClose } = {}) {
-  const scheme = location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(`${scheme}://${location.host}/ws/chat`);
+export function connectChat({ onToken, onDone, onError, onClose } = {}, WebSocketImpl = typeof WebSocket !== "undefined" ? WebSocket : null, url = null) {
+  if (!url && typeof location !== "undefined") {
+    const scheme = location.protocol === "https:" ? "wss" : "ws";
+    url = `${scheme}://${location.host}/ws/chat`;
+  }
+  const ws = new WebSocketImpl(url);
   ws.onmessage = (ev) => _handleChatEvent(JSON.parse(ev.data), { onToken, onDone, onError });
   ws.onclose = () => onClose?.();
   return {
     send: (message) => ws.send(JSON.stringify({ message })),
     close: () => ws.close(),
+    isOpen: () => ws.readyState === WebSocketImpl.OPEN,
   };
 }
 

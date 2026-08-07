@@ -94,6 +94,10 @@ export function createChat({ store, orb, audioEl, onConversation }) {
 
   function send(text) {
     if (!text || store.get().busy) return;
+    if (!chatSocket.isOpen()) {
+      addBubble("error", "Conexão perdida. Recarregue a página para continuar.");
+      return;
+    }
     addBubble("user", text);
     currentBubble = addBubble("jade", "", null);
     currentText = "";

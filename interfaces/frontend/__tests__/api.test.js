@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { _handleChatEvent } from "../api.js";
+import { _handleChatEvent, connectChat } from "../api.js";
 
 test("token chama onToken com o texto", () => {
   let recebido = null;
@@ -32,4 +32,30 @@ test("tipo desconhecido não chama nenhum handler", () => {
 
 test("handler ausente não quebra", () => {
   assert.doesNotThrow(() => _handleChatEvent({ type: "token", text: "oi" }, {}));
+});
+
+test("connectChat().isOpen() retorna true quando readyState === OPEN", () => {
+  const FakeWebSocket = class {
+    static OPEN = 1;
+    readyState = FakeWebSocket.OPEN;
+    onmessage = null;
+    onclose = null;
+    send() {}
+    close() {}
+  };
+  const socket = connectChat({}, FakeWebSocket, "ws://fake/ws/chat");
+  assert.equal(socket.isOpen(), true);
+});
+
+test("connectChat().isOpen() retorna false quando readyState !== OPEN", () => {
+  const FakeWebSocket = class {
+    static OPEN = 1;
+    readyState = 0; // CONNECTING
+    onmessage = null;
+    onclose = null;
+    send() {}
+    close() {}
+  };
+  const socket = connectChat({}, FakeWebSocket, "ws://fake/ws/chat");
+  assert.equal(socket.isOpen(), false);
 });
