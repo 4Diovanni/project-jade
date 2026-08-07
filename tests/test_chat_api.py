@@ -4,6 +4,7 @@ tools, RAG e journal mockados (sem Ollama, sem rede, sem escrever no vault)."""
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 
 import httpx
@@ -132,3 +133,40 @@ def test_ws_chat_erro_no_meio_nao_derruba_a_conexao(monkeypatch):
         assert tok == {"type": "token", "text": "ok"}
         fim = ws.receive_json()
         assert fim["type"] == "done"
+
+
+def test_stream_to_ws_drena_fila_ate_o_fim_mesmo_com_falha_no_envio():
+    """Se o envio pro WebSocket falha no meio (cliente desconectou),
+    _stream_to_ws precisa continuar drenando a fila até a sentinela chegar —
+    só assim garante que a thread produtora já terminou de mutar `session`
+    antes de devolver o controle pro chamador soltar o _session_lock."""
+    produtor_terminou = threading.Event()
+
+    class FakeSession:
+        def stream(self, message):
+            try:
+                yield "a"
+                yield "b"
+                yield "c"
+            finally:
+                produtor_terminou.set()
+
+    class FakeWebSocket:
+        def __init__(self):
+            self.chamadas = 0
+
+        async def send_json(self, payload):
+            self.chamadas += 1
+            if self.chamadas == 1:
+                raise RuntimeError("cliente desconectou")
+
+    async def _cenario():
+        return await api_mod._stream_to_ws(FakeWebSocket(), FakeSession(), "oi")
+
+    ok = asyncio.run(_cenario())
+
+    # No instante em que _stream_to_ws retorna, a thread produtora já deve
+    # ter terminado — senão o lock seria liberado com ela ainda mutando
+    # `session` em segundo plano (a corrida que este teste existe pra evitar).
+    assert produtor_terminou.is_set()
+    assert ok is False

@@ -50,7 +50,13 @@ async def _stream_to_ws(websocket: WebSocket, session: ChatSession, message: str
     """Drena session.stream() (síncrono) numa thread e repassa cada pedaço
     pro WebSocket assim que chega — a ponte entre o mundo síncrono do
     ChatSession e o event loop assíncrono do FastAPI. Devolve True se o
-    turno terminou sem erro (o chamador manda "done" só nesse caso)."""
+    turno terminou sem erro (o chamador manda "done" só nesse caso).
+
+    Continua consumindo a fila até a sentinela mesmo se o envio pro
+    WebSocket falhar (cliente desconectou no meio) — só assim garante que a
+    thread produtora já terminou de mutar `session` antes de devolver o
+    controle, o que importa porque quem chama libera o _session_lock
+    assim que esta função retorna."""
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
     sentinel = object()
@@ -65,12 +71,24 @@ async def _stream_to_ws(websocket: WebSocket, session: ChatSession, message: str
             loop.call_soon_threadsafe(queue.put_nowait, sentinel)
 
     threading.Thread(target=_produce, daemon=True).start()
+
+    ok = True
+    disconnected = False
     while (item := await queue.get()) is not sentinel:
+        payload = (
+            {"type": "error", "detail": str(item)}
+            if isinstance(item, Exception)
+            else {"type": "token", "text": item}
+        )
         if isinstance(item, Exception):
-            await websocket.send_json({"type": "error", "detail": str(item)})
-            return False
-        await websocket.send_json({"type": "token", "text": item})
-    return True
+            ok = False
+        if not disconnected:
+            try:
+                await websocket.send_json(payload)
+            except Exception:
+                disconnected = True
+                ok = False
+    return ok and not disconnected
 
 
 @app.websocket("/ws/chat")
