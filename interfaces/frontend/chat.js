@@ -1,10 +1,12 @@
-import { sendMessage, ttsUrl } from "./api.js";
+import { connectChat, ttsUrl } from "./api.js";
 import { modelBadge } from "./lib/format.js";
 import { renderMarkdown } from "./lib/markdown.js";
 
 export function createChat({ store, orb, audioEl, onConversation }) {
   const list = document.getElementById("messages");
   let lastTtsUrl = null;
+  let currentBubble = null;
+  let currentText = "";
 
   /** Avisa quem cuida da lista de conversas qual é a conversa atual. */
   function notifyConversation(id) {
@@ -48,23 +50,56 @@ export function createChat({ store, orb, audioEl, onConversation }) {
     }
   }
 
-  async function send(text) {
-    if (!text || store.get().busy) return;
-    addBubble("user", text);
-    store.set({ busy: true });
-    orb.setState("thinking");
-    try {
-      const { reply, model, conversation_id } = await sendMessage(text);
-      addBubble("jade", reply, model);
+  const chatSocket = connectChat({
+    onToken: (text) => {
+      currentText += text;
+      if (currentBubble) {
+        currentBubble.innerHTML = renderMarkdown(currentText);
+        list.scrollTop = list.scrollHeight; // segue a rolagem conforme o texto chega
+      }
+    },
+    onDone: ({ model, conversation_id }) => {
+      if (currentBubble && modelBadge(model)) {
+        const b = document.createElement("div");
+        b.className = "badge";
+        b.textContent = modelBadge(model);
+        list.appendChild(b);
+      }
       notifyConversation(conversation_id);
+      const textoFinal = currentText;
+      currentBubble = null;
+      currentText = "";
       store.set({ busy: false });
-      await speak(reply);
-    } catch (e) {
-      console.error(e);
+      speak(textoFinal);
+    },
+    onError: (detail) => {
+      console.error(detail);
+      if (currentBubble) currentBubble.remove();
+      currentBubble = null;
+      currentText = "";
       addBubble("error", "Jade indisponível no momento.");
       store.set({ busy: false });
       orb.setState("idle");
-    }
+    },
+    onClose: () => {
+      // conexão caiu: se havia um turno em andamento, avisa — sem
+      // reconexão automática (o usuário reenvia).
+      if (store.get().busy) {
+        addBubble("error", "Conexão perdida. Tente enviar de novo.");
+        store.set({ busy: false });
+        orb.setState("idle");
+      }
+    },
+  });
+
+  function send(text) {
+    if (!text || store.get().busy) return;
+    addBubble("user", text);
+    currentBubble = addBubble("jade", "", null);
+    currentText = "";
+    store.set({ busy: true });
+    orb.setState("thinking");
+    chatSocket.send(text);
   }
 
   return { send, addBubble, notifyConversation, clear: () => { list.innerHTML = ""; } };
