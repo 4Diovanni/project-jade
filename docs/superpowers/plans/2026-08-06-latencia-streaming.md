@@ -1076,9 +1076,19 @@ export function connectChat({ onToken, onDone, onError, onClose } = {}) {
   return {
     send: (message) => ws.send(JSON.stringify({ message })),
     close: () => ws.close(),
+    isOpen: () => ws.readyState === WebSocket.OPEN,
   };
 }
 ```
+
+**Nota (fix de revisão):** `isOpen` acima não estava no desenho original — foi
+acrescentado depois de uma revisão encontrar uma corrida real (WebSocket
+morto enquanto ocioso → `send()` travava `busy=true` para sempre, sem
+mostrar erro nenhum, porque enviar num socket fechado é descartado em
+silêncio pela spec do WebSocket). Ver `Por (chat.js)` mais abaixo pro uso.
+Ver o ledger da Task 6. A implementação real também aceita um
+`WebSocketImpl`/`url` injetáveis para viabilizar teste sem browser — não é
+essencial reproduzir isso aqui, é detalhe de testabilidade.
 
 `sendMessage` (o `fetch("/chat")` antigo) **não é removido** — fica disponível para quem ainda precisar de uma chamada síncrona pontual (não é usado por `chat.js` depois deste task, mas remover é escopo além do pedido).
 
@@ -1189,6 +1199,10 @@ Por (a conexão WebSocket abre uma vez, na criação do chat — os handlers fic
 
   function send(text) {
     if (!text || store.get().busy) return;
+    if (!chatSocket.isOpen()) {
+      addBubble("error", "Conexão perdida. Recarregue a página para continuar.");
+      return;
+    }
     addBubble("user", text);
     currentBubble = addBubble("jade", "", null);
     currentText = "";
