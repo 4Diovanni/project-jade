@@ -3,6 +3,7 @@ import { createOrb } from "./orb.js";
 import { createChat } from "./chat.js";
 import { createThreads } from "./threads.js";
 import { createVoice } from "./voice.js";
+import { createSpotify, spotifyCallbackParam } from "./spotify.js";
 import { reset } from "./api.js";
 
 const store = createStore();
@@ -72,6 +73,33 @@ muteBtn.addEventListener("click", () => {
   muteBtn.textContent = muted ? "🔇" : "🔊";
   muteBtn.setAttribute("aria-pressed", String(muted));
 });
+
+const spotify = createSpotify({ store });
+
+const tabChat = document.getElementById("tab-chat");
+const tabSpotify = document.getElementById("tab-spotify");
+const viewChat = document.getElementById("view-chat");
+const viewSpotify = document.getElementById("view-spotify");
+
+function activateTab(name) {
+  const isChat = name === "chat";
+  viewChat.hidden = !isChat;
+  viewSpotify.hidden = isChat;
+  tabChat.classList.toggle("active", isChat);
+  tabSpotify.classList.toggle("active", !isChat);
+  tabChat.setAttribute("aria-selected", String(isChat));
+  tabSpotify.setAttribute("aria-selected", String(!isChat));
+  if (!isChat) spotify.activate();
+}
+
+tabChat.addEventListener("click", () => activateTab("chat"));
+tabSpotify.addEventListener("click", () => activateTab("spotify"));
+
+// Depois do OAuth, /spotify/callback (interfaces/api.py) redireciona pra cá
+// com ?spotify=conectado|erro — a aba Spotify precisa abrir sozinha, senão
+// o usuário volta pro Chat sem ver o resultado do login.
+const veioDoCallback = spotifyCallbackParam(window.location.search) !== null;
+activateTab(veioDoCallback ? "spotify" : "chat");
 
 voice.bind();
 threads.refresh();

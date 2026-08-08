@@ -73,3 +73,29 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   gap: 16px; }
 .orb-canvas { width: 100%; max-width: 320px; aspect-ratio: 1; }
 .orb-status { color: var(--jade-spring); letter-spacing: 1px; text-transform: lowercase; }
+
+/* Tablist Chat/Spotify — troca a view inteira abaixo dela. */
+.tabbar { display: flex; gap: 4px; padding: 8px 12px; background: var(--panel);
+  border-bottom: 1px solid #16211c; }
+.tab { padding: 8px 16px; background: transparent; color: var(--muted); border: none;
+  border-radius: 8px 8px 0 0; cursor: pointer; font-size: 14px; }
+.tab.active { color: var(--jade-spring); background: #14201b; }
+.layout, .view-spotify { height: calc(100vh - 41px); }
+
+/* View Spotify: ocupa a área central inteira (sem as colunas de threads/orb). */
+.view-spotify { display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
+.spotify-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px;
+  border-bottom: 1px solid #16211c; }
+.spotify-filter { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #22332b;
+  background: #0c1210; color: var(--text); }
+.spotify-sync-btn { padding: 10px 14px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--jade-emerald); background: transparent; color: var(--text); }
+.spotify-status { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.spotify-status a { color: var(--jade-spring); }
+.spotify-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; padding: 12px; overflow: hidden; }
+.spotify-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+.spotify-track { padding: 8px 10px; border-radius: 6px; cursor: pointer; color: var(--text);
+  font-size: 14px; }
+.spotify-track:hover { background: #14201b; }
+.spotify-card { display: flex; align-items: flex-start; justify-content: center; padding-top: 8px; }
