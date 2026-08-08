@@ -5,6 +5,9 @@ os três ramos de resposta (tool, modelo local, Claude nuvem) com LLM e tools
 **mockados** — sem Ollama, sem rede e sem escrever no vault (CI-safe).
 """
 
+import threading
+import time
+
 import pytest
 
 import core.chat as chat_mod
@@ -13,7 +16,10 @@ from core.chat import ChatSession
 
 
 class FakeLLM:
-    """LLM falso: registra as mensagens recebidas e devolve um .content fixo."""
+    """LLM falso: registra as mensagens recebidas. invoke() devolve um
+    .content fixo; stream() fatia a mesma resposta em pedaços, simulando
+    geração incremental (com AIMessageChunk de verdade, para exercitar o
+    merge por + que _stream_impl usa)."""
 
     def __init__(self, reply: str = "resposta do modelo") -> None:
         self.reply = reply
@@ -22,6 +28,14 @@ class FakeLLM:
     def invoke(self, messages):
         self.calls.append(messages)
         return type("Msg", (), {"content": self.reply})()
+
+    def stream(self, messages):
+        self.calls.append(messages)
+        from langchain_core.messages import AIMessageChunk
+
+        meio = len(self.reply) // 2 or 1
+        yield AIMessageChunk(content=self.reply[:meio])
+        yield AIMessageChunk(content=self.reply[meio:], response_metadata={"eval_count": 7})
 
 
 class FakeTool:
@@ -224,3 +238,119 @@ def test_send_funciona_sem_capture():
     """Fora de um capture(), send() se comporta exatamente como antes."""
     session = ChatSession(use_tools=False, use_rag=False, use_router=False, use_journal=False)
     assert session.send("oi") == "resposta do modelo"
+
+
+def test_send_poda_historico_alem_do_limite(monkeypatch):
+    from core.config import settings
+
+    monkeypatch.setattr(chat_mod, "route", lambda message: None)
+    monkeypatch.setattr(chat_mod, "cloud_available", lambda: False)
+    monkeypatch.setattr(settings, "HISTORY_MAX_TURNS", 2)
+    sess = _session(use_tools=False)
+
+    for i in range(5):
+        sess.send(f"mensagem {i}")
+
+    # 5 turnos enviados, só os últimos 2 (4 mensagens) ficam no histórico.
+    assert len(sess._history) == 4
+    # Confirma que sobreviveram os turnos mais RECENTES, não os mais antigos
+    # (um teste só de tamanho passaria igual com a poda invertida). _record()
+    # empilha HumanMessage seguido de AIMessage por turno, então a mensagem
+    # humana mais antiga que sobrou é _history[0].
+    assert sess._history[0].content == "mensagem 3"
+    assert sess._history[2].content == "mensagem 4"
+
+
+def test_sync_vault_roda_em_background_e_e_esperado_na_1a_busca(monkeypatch):
+    """A thread nasce no __init__ (não bloqueia a criação da sessão) e
+    _retrieve_context() só prossegue depois que ela termina."""
+    sync_terminou = threading.Event()
+    chamadas = []
+
+    def _fake_sync_vault():
+        chamadas.append("chamou")
+        time.sleep(0.05)
+        sync_terminou.set()
+        return 0
+
+    monkeypatch.setattr("core.memory.sync_vault", _fake_sync_vault)
+    monkeypatch.setattr("core.memory.query_memory", lambda message: [])
+
+    sess = _session(use_rag=True, use_tools=False)
+    # __init__ não bloqueou esperando o sync (senão sync_terminou já estaria setado).
+    assert not sync_terminou.is_set()
+
+    context = sess._retrieve_context("oi")
+
+    assert sync_terminou.is_set()
+    assert context == ""
+    assert len(chamadas) == 1
+
+    # 2ª busca não dispara sync_vault de novo.
+    sess._retrieve_context("de novo")
+    assert len(chamadas) == 1
+
+
+def test_sync_vault_e_esperado_tambem_no_ramo_de_tool(monkeypatch):
+    """O ramo de TOOL também espera a thread de sync terminar antes de retornar,
+    fechando a corrida de escrita no database/index_state.json quando múltiplas
+    sessões rodam em sequence (ex.: bench/runner.py com casos roteados a tool)."""
+    sync_terminou = threading.Event()
+    chamadas = []
+
+    def _fake_sync_vault():
+        chamadas.append("chamou")
+        time.sleep(0.05)
+        sync_terminou.set()
+        return 0
+
+    tool = FakeTool()
+    monkeypatch.setattr(chat_mod, "route", lambda message: tool)
+    monkeypatch.setattr("core.memory.sync_vault", _fake_sync_vault)
+
+    sess = _session(use_rag=True, use_tools=True)
+    # __init__ não bloqueou esperando o sync.
+    assert not sync_terminou.is_set()
+
+    out = sess.send("execute tool")
+
+    # send() retornou, e sync_terminou está setado (tool esperou a sync terminar).
+    assert sync_terminou.is_set()
+    assert out == "tool executou"
+    assert len(chamadas) == 1
+    assert tool.ran_with == "execute tool"
+
+
+def test_stream_gera_multiplos_chunks_que_concatenam_igual_ao_send(monkeypatch):
+    """stream() devolve a mesma resposta que send(), só que em pedaços."""
+    monkeypatch.setattr(chat_mod, "route", lambda message: None)
+    monkeypatch.setattr(chat_mod, "cloud_available", lambda: False)
+    sess = _session(use_tools=False)
+
+    chunks = list(sess.stream("oi jade"))
+
+    assert len(chunks) > 1
+    assert "".join(chunks) == "resposta do modelo"
+    assert sess.last_model == "local"
+
+
+def test_stream_tool_devolve_um_unico_pedaco(monkeypatch):
+    tool = FakeTool()
+    monkeypatch.setattr(chat_mod, "route", lambda message: tool)
+    sess = _session()
+
+    chunks = list(sess.stream("abra a calculadora"))
+
+    assert chunks == ["tool executou"]
+    assert sess.last_model == "tool"
+
+
+def test_stream_grava_no_historico_como_send(monkeypatch):
+    """stream() tem os mesmos efeitos colaterais de send() (grava o turno)."""
+    monkeypatch.setattr(chat_mod, "route", lambda message: None)
+    monkeypatch.setattr(chat_mod, "cloud_available", lambda: False)
+    sess = _session(use_tools=False)
+
+    list(sess.stream("oi"))
+
+    assert len(sess._history) == 2

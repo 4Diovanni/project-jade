@@ -9,6 +9,27 @@ async function jsonPost(path, body) {
   return res.json();
 }
 
+export function _handleChatEvent(data, { onToken, onDone, onError } = {}) {
+  if (data.type === "token") onToken?.(data.text);
+  else if (data.type === "done") onDone?.(data);
+  else if (data.type === "error") onError?.(data.detail);
+}
+
+export function connectChat({ onToken, onDone, onError, onClose } = {}, WebSocketImpl = typeof WebSocket !== "undefined" ? WebSocket : null, url = null) {
+  if (!url && typeof location !== "undefined") {
+    const scheme = location.protocol === "https:" ? "wss" : "ws";
+    url = `${scheme}://${location.host}/ws/chat`;
+  }
+  const ws = new WebSocketImpl(url);
+  ws.onmessage = (ev) => _handleChatEvent(JSON.parse(ev.data), { onToken, onDone, onError });
+  ws.onclose = () => onClose?.();
+  return {
+    send: (message) => ws.send(JSON.stringify({ message })),
+    close: () => ws.close(),
+    isOpen: () => ws.readyState === WebSocketImpl.OPEN,
+  };
+}
+
 export const sendMessage = (message) => jsonPost("/chat", { message });
 export const reset = () =>
   fetch("/reset", { method: "POST" }).then((r) => {

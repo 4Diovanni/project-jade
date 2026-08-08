@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
 import shutil
 import tempfile
+import threading
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    File,
+    HTTPException,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -24,6 +34,9 @@ logger = logging.getLogger(__name__)
 # Fase 1: uma única sessão de conversa (assistente pessoal = 1 usuário local).
 # A sessão é criada de forma preguiçosa para a API subir mesmo sem o LLM pronto.
 _session: ChatSession | None = None
+# Serializa qualquer combinação de /chat, /ws/chat e /voice/chat — sem isto,
+# duas requisições concorrentes corrompem o _history compartilhado.
+_session_lock = asyncio.Lock()
 
 
 def _get_session() -> ChatSession:
@@ -31,6 +44,91 @@ def _get_session() -> ChatSession:
     if _session is None:
         _session = ChatSession()
     return _session
+
+
+# WebSocket handshakes não passam pela same-origin policy do browser — o
+# servidor precisa validar o Origin ele mesmo. Sem isso, qualquer página
+# http:// aberta no mesmo browser do usuário poderia abrir um WebSocket para
+# cá e ler as respostas da Jade (geradas com RAG sobre o vault pessoal).
+_ALLOWED_WS_ORIGINS = {
+    f"http://{settings.API_HOST}:{settings.API_PORT}",
+    f"http://localhost:{settings.API_PORT}",
+}
+
+
+async def _stream_to_ws(websocket: WebSocket, session: ChatSession, message: str) -> bool:
+    """Drena session.stream() (síncrono) numa thread e repassa cada pedaço
+    pro WebSocket assim que chega — a ponte entre o mundo síncrono do
+    ChatSession e o event loop assíncrono do FastAPI. Devolve True se o
+    turno terminou sem erro (o chamador manda "done" só nesse caso).
+
+    Continua consumindo a fila até a sentinela mesmo se o envio pro
+    WebSocket falhar (cliente desconectou no meio) — só assim garante que a
+    thread produtora já terminou de mutar `session` antes de devolver o
+    controle, o que importa porque quem chama libera o _session_lock
+    assim que esta função retorna."""
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+    sentinel = object()
+
+    def _produce() -> None:
+        try:
+            for chunk in session.stream(message):
+                loop.call_soon_threadsafe(queue.put_nowait, chunk)
+        except Exception as e:
+            loop.call_soon_threadsafe(queue.put_nowait, e)
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, sentinel)
+
+    threading.Thread(target=_produce, daemon=True).start()
+
+    ok = True
+    disconnected = False
+    while (item := await queue.get()) is not sentinel:
+        payload = (
+            {"type": "error", "detail": str(item)}
+            if isinstance(item, Exception)
+            else {"type": "token", "text": item}
+        )
+        if isinstance(item, Exception):
+            ok = False
+        if not disconnected:
+            try:
+                await websocket.send_json(payload)
+            except Exception:
+                disconnected = True
+                ok = False
+    return ok and not disconnected
+
+
+@app.websocket("/ws/chat")
+async def ws_chat(websocket: WebSocket) -> None:
+    origin = websocket.headers.get("origin")
+    if origin is not None and origin not in _ALLOWED_WS_ORIGINS:
+        await websocket.close(code=1008)
+        return
+    await websocket.accept()
+    session = _get_session()
+    try:
+        while True:
+            data = await websocket.receive_json()
+            async with _session_lock:
+                ok = await _stream_to_ws(websocket, session, data["message"])
+            if ok:
+                await websocket.send_json(
+                    {
+                        "type": "done",
+                        "model": session.last_model,
+                        "conversation_id": session.conversation_id,
+                    }
+                )
+                # Resume o assunto num título — em segundo plano, sem bloquear
+                # o loop do WebSocket (não há BackgroundTasks num handler de WS).
+                task = session.title_task()
+                if task is not None:
+                    asyncio.create_task(asyncio.to_thread(task))
+    except WebSocketDisconnect:
+        pass
 
 
 class ChatRequest(BaseModel):
@@ -43,10 +141,11 @@ def health() -> dict:
 
 
 @app.post("/chat")
-def chat(req: ChatRequest, background: BackgroundTasks) -> dict:
+async def chat(req: ChatRequest, background: BackgroundTasks) -> dict:
     session = _get_session()
     try:
-        reply = session.send(req.message)
+        async with _session_lock:
+            reply = await asyncio.to_thread(session.send, req.message)
     except Exception as e:  # provider fora do ar, chave faltando, etc.
         # O detalhe do erro vai para o log do servidor, não para o cliente
         # (evita expor stack trace/implementação na resposta HTTP).
@@ -64,10 +163,16 @@ def chat(req: ChatRequest, background: BackgroundTasks) -> dict:
 
 
 @app.post("/reset")
-def reset(background: BackgroundTasks) -> dict:
+async def reset(background: BackgroundTasks) -> dict:
     """Começa uma conversa nova. Responde na hora: indexar no RAG, resumir o
-    título e aprender sobre o usuário rodam em segundo plano."""
-    background.add_task(_get_session().detach())
+    título e aprender sobre o usuário rodam em segundo plano.
+
+    Adquire o mesmo _session_lock de /chat e /ws/chat antes de mutar a sessão
+    (detach() limpa _history/last_model de forma síncrona) — sem o lock, um
+    /reset correria com um turno em andamento."""
+    async with _session_lock:
+        task = _get_session().detach()
+    background.add_task(task)
     return {"status": "histórico limpo"}
 
 
@@ -228,7 +333,8 @@ async def voice_chat(file: UploadFile = File(...)) -> dict:
     try:
         transcription = transcribe(tmp)
         session = _get_session()
-        reply = session.send(transcription)
+        async with _session_lock:
+            reply = await asyncio.to_thread(session.send, transcription)
         audio_path = synthesize_reply(reply)
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Falha no voice chat: {e}") from e

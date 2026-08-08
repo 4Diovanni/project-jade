@@ -53,6 +53,13 @@ class Settings:
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
+    # ── Sessão / histórico ──
+    # Quantas trocas (pergunta+resposta) ficam no histórico ativo do prompt.
+    # Turnos mais antigos saem do prompt mas continuam na nota do Obsidian
+    # (journal) e no RAG — nada se perde de memória de longo prazo, só sai do
+    # contexto ativo enviado ao LLM a cada turno.
+    HISTORY_MAX_TURNS: int = int(os.getenv("HISTORY_MAX_TURNS", "20"))
+
     # ── Obsidian ──
     # Raiz do que a Jade LÊ (RAG). Apontar para a raiz do repo faz ela enxergar
     # os documentos do próprio projeto (arquitetura, README) além das notas.

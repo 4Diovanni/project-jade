@@ -13,6 +13,8 @@ extrai fatos duráveis sobre o usuário (`core.profile`).
 from __future__ import annotations
 
 import contextlib
+import threading
+from collections.abc import Iterator
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
@@ -70,7 +72,14 @@ class ChatSession:
         self._journal: ConversationJournal | None = ConversationJournal() if enabled else None
         #: qual cérebro respondeu o último turno: "tool" | "local" | "claude"
         self.last_model: str | None = None
-        self._synced = False  # sincroniza o vault (arquivos novos) na 1ª busca
+        # Sincroniza o vault (arquivos novos/alterados) em background, desde a
+        # criação da sessão — não só antes da 1ª busca do RAG. Quando a sessão
+        # nasce bem antes da 1ª mensagem chegar (ex.: ao abrir a tela do chat,
+        # que conecta o WebSocket na hora), o custo desaparece na prática.
+        self._sync_thread: threading.Thread | None = None
+        if use_rag:
+            self._sync_thread = threading.Thread(target=self._sync_vault_safe, daemon=True)
+            self._sync_thread.start()
 
     @property
     def journal_path(self):
@@ -121,19 +130,26 @@ class ChatSession:
     def _record(self, message: str, text: str) -> None:
         self._history.append(HumanMessage(content=message))
         self._history.append(AIMessage(content=text))
+        self._history = self._history[-2 * settings.HISTORY_MAX_TURNS :]
         if self._journal is not None:
             with contextlib.suppress(Exception):
                 self._journal.record(message, text)
 
-    def _ensure_synced(self) -> None:
-        """Indexa arquivos novos/alterados do vault — uma vez por sessão."""
-        if self._synced:
-            return
-        self._synced = True
+    def _sync_vault_safe(self) -> None:
+        """Alvo da thread de sincronização — roda em background, blindado.
+        Exceções levantadas numa thread não propagam para quem dá join() nela,
+        então a proteção precisa estar aqui dentro, não em _ensure_synced()."""
         with contextlib.suppress(Exception):
             from core.memory import sync_vault
 
             sync_vault()
+
+    def _ensure_synced(self) -> None:
+        """Espera a sincronização em background terminar — custo zero se ela
+        já tiver terminado, espera o resto se ainda estiver rodando."""
+        if self._sync_thread is not None:
+            self._sync_thread.join()
+            self._sync_thread = None
 
     def _retrieve_context(self, message: str) -> str:
         if not self._use_rag:
@@ -148,8 +164,10 @@ class ChatSession:
             return ""
         return "\n\n".join(chunks)
 
-    def send(self, message: str) -> str:
-        """Processa uma mensagem: humor → tool → senão conversa (modelo + RAG)."""
+    def _stream_impl(self, message: str) -> Iterator[str]:
+        """Gerador que produz a resposta token a token: humor → tool → senão
+        conversa (modelo + RAG). send() e stream() são os dois jeitos de
+        consumir este gerador — inteiro de uma vez, ou aos pedaços."""
         # 1) O tom do usuário ajusta o humor da Jade (persistido).
         # `note` fica DENTRO do bloco: se `register()` falhar, `mood_level`
         # continua 0 e anotá-lo mesmo assim inventaria um delta de humor contra o
@@ -175,9 +193,12 @@ class ChatSession:
                 except Exception as e:
                     text = f"Não consegui executar a ação: {e}"
                 self.last_model = "tool"
+                yield text
+                with timed("rag_sync"):
+                    self._ensure_synced()
                 with timed("journal"):
                     self._record(message, text)
-                return text
+                return
 
         # 3) Conversa. Contexto do RAG é injetado só na chamada ao LLM.
         context = self._retrieve_context(message)
@@ -189,13 +210,26 @@ class ChatSession:
             user_turn = HumanMessage(content=augmented)
 
         messages = [self._system_message(mood_level), *self._history, user_turn]
+        full = None
         with timed("llm"):
-            response = llm.invoke(messages)
-        _note_llm_usage(response)
-        text = response.content if hasattr(response, "content") else str(response)
+            for chunk in llm.stream(messages):
+                full = chunk if full is None else full + chunk
+                if chunk.content:
+                    yield chunk.content
+        _note_llm_usage(full)
+        text = full.content if full is not None else ""
         with timed("journal"):
             self._record(message, text)
-        return text
+
+    def send(self, message: str) -> str:
+        """Processa uma mensagem e devolve a resposta inteira de uma vez.
+        Use stream() para consumi-la aos pedaços."""
+        return "".join(self._stream_impl(message))
+
+    def stream(self, message: str) -> Iterator[str]:
+        """Como send(), mas devolve a resposta aos pedaços conforme o LLM
+        gera (ou um único pedaço, no caso de uma tool)."""
+        return self._stream_impl(message)
 
     def _transcript(self) -> str:
         lines = []
