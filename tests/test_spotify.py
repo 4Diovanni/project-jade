@@ -276,3 +276,29 @@ def test_start_background_sync_if_stale_dispara_quando_linkado(monkeypatch):
 
     assert spotify_mod._sync_thread is not None
     spotify_mod._sync_thread.join(timeout=2)
+
+
+def test_start_background_sync_if_stale_nao_dispara_segunda_sync_enquanto_viva(monkeypatch):
+    """Guarda contra sync duplicada: se já há uma thread viva, chamar
+    start_background_sync_if_stale() de novo é no-op (retorna sem criar
+    segunda thread)."""
+    monkeypatch.setattr(spotify_mod, "is_linked", lambda: True)
+    liberar = threading.Event()
+
+    def _sync_lento():
+        liberar.wait(timeout=2)
+
+    # Inicia thread falsa que dura enquanto liberar não é setado
+    thread_original = threading.Thread(target=_sync_lento, daemon=True)
+    thread_original.start()
+    spotify_mod._sync_thread = thread_original
+
+    # Chama start_background_sync_if_stale enquanto thread ainda está viva
+    spotify_mod.start_background_sync_if_stale()
+
+    # Confirma que É O MESMO objeto de thread (identidade, não só "não é None")
+    assert spotify_mod._sync_thread is thread_original
+
+    # Libera e aguarda terminação
+    liberar.set()
+    thread_original.join(timeout=2)
