@@ -118,6 +118,24 @@ No chat, peça naturalmente:
 > nunca executa comandos arbitrários. Para desligar o controle do sistema,
 > coloque `JADE_SYSTEM_TOOL_ENABLED=false` no `.env`.
 
+### 🎵 Spotify
+O Jade toca música por comando de voz/texto, pesquisa faixas e mantém um
+cache local da sua biblioteca (Curtidas + playlists).
+
+1. Registre um app em <https://developer.spotify.com/dashboard>, pegue o
+   **Client ID** e o **Client Secret**, e cadastre o **Redirect URI**
+   `http://127.0.0.1:8000/spotify/callback` (padrão) nas configurações do app.
+2. Preencha `SPOTIFY_CLIENT_ID` e `SPOTIFY_CLIENT_SECRET` no `.env`.
+3. Suba a API (`python main.py`) e acesse
+   <http://127.0.0.1:8000/spotify/login> — ou clique em **"Conectar ao
+   Spotify"** na aba Spotify do frontend — pra autorizar sua conta.
+4. Comandos disponíveis no chat:
+   - `toca <nome>` / `coloca <nome>` — toca uma faixa do cache local.
+   - `pesquisa <termo> no spotify` — busca direto na API do Spotify.
+   - `sincroniza minhas músicas` — força um resync do cache.
+
+> 🔒 Pra desligar a tool, coloque `JADE_SPOTIFY_TOOL_ENABLED=false` no `.env`.
+
 ---
 
 ## 4. Como ele decide o que fazer
@@ -152,6 +170,10 @@ Com `python main.py` rodando (`http://127.0.0.1:8000`):
 | POST | `/voice/tts` | texto → áudio mp3 — `{"text": "..."}` |
 | POST | `/voice/chat` | áudio → Jade responde (texto + `audio_url`) |
 | GET | `/voice/audio/{nome}` | baixa um áudio gerado |
+| GET | `/spotify/login` | inicia a autorização OAuth com o Spotify |
+| GET | `/spotify/status` | conta linkada? quantas faixas no cache? última sync? |
+| GET | `/spotify/library` | cache de faixas, agrupado por playlist |
+| POST | `/spotify/sync` | força um resync completo da biblioteca |
 
 O jeito mais fácil de experimentar é pelo **Swagger** em `/docs`.
 
@@ -205,7 +227,7 @@ As opções que você provavelmente vai querer mexer:
 
 ## 9. O que vem por aí
 
-- 🎵 **Spotify** e 📧 **e-mail** (Fase 4 — as Mãos).
+- 📧 **E-mail** (Fase 4 — as Mãos).
 - 📱 **WhatsApp** (falar com o Jade pelo celular).
 - 🪞 **Memória evolutiva**: o Jade aprender seu jeito a partir das conversas.
 
