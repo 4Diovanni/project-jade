@@ -9,8 +9,14 @@
 .env.local
 *.key
 
-# Estado do editor Obsidian (layout/plugins pessoais)
-.obsidian/
+# Estado do editor Obsidian (layout/plugins pessoais) — fica de fora.
+# Exceção: os arquivos que controlam a VISUALIZAÇÃO do grafo/tema são
+# versionados de propósito, para quem abrir o vault já ver as notas da
+# Jade (memória/humor/personalidade) separadas visualmente das conversas
+# e da documentação do projeto.
+.obsidian/*
+!.obsidian/graph.json
+!.obsidian/appearance.json
 
 # Notas pessoais do vault na raiz — mantêm-se PRIVADAS.
 # Só os documentos do projeto (whitelist abaixo) são versionados.

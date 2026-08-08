@@ -1,0 +1,58 @@
+{
+  "collapse-filter": false,
+  "search": "",
+  "showTags": true,
+  "showAttachments": false,
+  "hideUnresolved": true,
+  "showOrphans": true,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    {
+      "query": "path:\"obsidian_notes/Conversas\"",
+      "color": {
+        "a": 1,
+        "rgb": 5016565
+      }
+    },
+    {
+      "query": "file:\"Jade —\"",
+      "color": {
+        "a": 1,
+        "rgb": 10181046
+      }
+    },
+    {
+      "query": "file:\"Sobre o Usuário\" OR file:\"Quem_sou_eu_giovanni\"",
+      "color": {
+        "a": 1,
+        "rgb": 3066993
+      }
+    },
+    {
+      "query": "path:\"obsidian_notes/Documentos\"",
+      "color": {
+        "a": 1,
+        "rgb": 15105570
+      }
+    },
+    {
+      "query": "file:\"README\" OR file:\"CLAUDE\" OR file:\"projeto_jade_arquitetura\" OR file:\"COMO_USAR\" OR file:\"SECURITY\"",
+      "color": {
+        "a": 1,
+        "rgb": 1483424
+      }
+    }
+  ],
+  "collapse-display": true,
+  "showArrow": true,
+  "textFadeMultiplier": -2.1,
+  "nodeSizeMultiplier": 1.87929756097561,
+  "lineSizeMultiplier": 1.35918048780488,
+  "collapse-forces": true,
+  "centerStrength": 0.425560975609756,
+  "repelStrength": 14.1230486685032,
+  "linkStrength": 0.68780487804878,
+  "linkDistance": 287,
+  "scale": 0.3213363860503532,
+  "close": true
+}
