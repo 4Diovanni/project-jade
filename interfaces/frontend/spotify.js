@@ -85,7 +85,11 @@ export function createSpotify({ store } = {}) {
   // aba mostraria "0 faixas" mesmo com a conta recém-conectada.
   function pollUntilSynced(attempt = 0) {
     statusEl.textContent = "Sincronizando sua biblioteca…";
-    if (attempt >= POLL_MAX_ATTEMPTS) return;
+    if (attempt >= POLL_MAX_ATTEMPTS) {
+      statusEl.textContent =
+        'Não consegui confirmar a sincronização. Clique em "Sincronizar agora" pra tentar de novo.';
+      return;
+    }
     setTimeout(async () => {
       try {
         const status = await getSpotifyStatus();
@@ -96,6 +100,8 @@ export function createSpotify({ store } = {}) {
         }
       } catch (e) {
         console.error(e);
+        statusEl.textContent =
+          'Não consegui confirmar a sincronização. Clique em "Sincronizar agora" pra tentar de novo.';
       }
     }, POLL_INTERVAL_MS);
   }
