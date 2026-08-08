@@ -35,7 +35,17 @@ def _connect() -> sqlite3.Connection:
 
 
 def upsert_tracks(tracks: list[dict]) -> int:
-    """INSERT OR REPLACE de cada faixa — um resync inteiro não duplica linha."""
+    """INSERT OR REPLACE de cada faixa — um resync inteiro não duplica linha.
+
+    Devolve a contagem REAL de linhas na tabela após o commit, não
+    `len(tracks)`: como `id` é PRIMARY KEY e a mesma faixa pode aparecer em
+    Curtidas E numa playlist, `tracks` pode ter entradas duplicadas por id
+    que o INSERT OR REPLACE colapsa em uma linha só — devolver `len(tracks)`
+    inflava a contagem reportada em `/spotify/sync`, divergindo do que
+    `/spotify/status` (via `track_count()`) mostrava depois (achado #3 da
+    whole-branch review). Limitação conhecida (não corrigida aqui, fora de
+    escopo): quando isso acontece, a faixa fica associada só à última
+    playlist_name processada — não há tabela de junção faixa↔playlist."""
     conn = _connect()
     try:
         conn.executemany(
@@ -54,9 +64,10 @@ def upsert_tracks(tracks: list[dict]) -> int:
             ],
         )
         conn.commit()
+        row = conn.execute("SELECT COUNT(*) AS n FROM spotify_tracks").fetchone()
     finally:
         conn.close()
-    return len(tracks)
+    return row["n"]
 
 
 def search_by_name(name: str) -> dict | None:

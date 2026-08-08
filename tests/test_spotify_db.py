@@ -27,6 +27,33 @@ def test_upsert_tracks_e_idempotente():
     assert db.track_count() == 1
 
 
+def test_upsert_tracks_com_mesma_faixa_em_curtidas_e_playlist_conta_uma_vez():
+    """Achado #3 da whole-branch review: uma faixa em Curtidas E numa
+    playlist gera duas entradas com o mesmo id na lista que sync_library()
+    monta; upsert_tracks() devolvia len(tracks) (2), inflado em relação a
+    track_count() (1) — /spotify/sync e /spotify/status divergiam."""
+    tracks = [
+        {
+            "id": "1",
+            "name": "Bohemian Rhapsody",
+            "artists": "Queen",
+            "url": "https://open.spotify.com/track/1",
+            "playlist_id": None,
+            "playlist_name": "Curtidas",
+        },
+        {
+            "id": "1",
+            "name": "Bohemian Rhapsody",
+            "artists": "Queen",
+            "url": "https://open.spotify.com/track/1",
+            "playlist_id": "p1",
+            "playlist_name": "Rock",
+        },
+    ]
+    assert db.upsert_tracks(tracks) == 1
+    assert db.track_count() == 1
+
+
 def test_search_by_name_ignora_caixa_e_acento():
     db.upsert_tracks(
         [
