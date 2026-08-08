@@ -253,6 +253,12 @@ def test_send_poda_historico_alem_do_limite(monkeypatch):
 
     # 5 turnos enviados, só os últimos 2 (4 mensagens) ficam no histórico.
     assert len(sess._history) == 4
+    # Confirma que sobreviveram os turnos mais RECENTES, não os mais antigos
+    # (um teste só de tamanho passaria igual com a poda invertida). _record()
+    # empilha HumanMessage seguido de AIMessage por turno, então a mensagem
+    # humana mais antiga que sobrou é _history[0].
+    assert sess._history[0].content == "mensagem 3"
+    assert sess._history[2].content == "mensagem 4"
 
 
 def test_sync_vault_roda_em_background_e_e_esperado_na_1a_busca(monkeypatch):

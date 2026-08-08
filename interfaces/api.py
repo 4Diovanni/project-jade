@@ -46,6 +46,16 @@ def _get_session() -> ChatSession:
     return _session
 
 
+# WebSocket handshakes não passam pela same-origin policy do browser — o
+# servidor precisa validar o Origin ele mesmo. Sem isso, qualquer página
+# http:// aberta no mesmo browser do usuário poderia abrir um WebSocket para
+# cá e ler as respostas da Jade (geradas com RAG sobre o vault pessoal).
+_ALLOWED_WS_ORIGINS = {
+    f"http://{settings.API_HOST}:{settings.API_PORT}",
+    f"http://localhost:{settings.API_PORT}",
+}
+
+
 async def _stream_to_ws(websocket: WebSocket, session: ChatSession, message: str) -> bool:
     """Drena session.stream() (síncrono) numa thread e repassa cada pedaço
     pro WebSocket assim que chega — a ponte entre o mundo síncrono do
@@ -93,6 +103,10 @@ async def _stream_to_ws(websocket: WebSocket, session: ChatSession, message: str
 
 @app.websocket("/ws/chat")
 async def ws_chat(websocket: WebSocket) -> None:
+    origin = websocket.headers.get("origin")
+    if origin is not None and origin not in _ALLOWED_WS_ORIGINS:
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     session = _get_session()
     try:
@@ -108,6 +122,11 @@ async def ws_chat(websocket: WebSocket) -> None:
                         "conversation_id": session.conversation_id,
                     }
                 )
+                # Resume o assunto num título — em segundo plano, sem bloquear
+                # o loop do WebSocket (não há BackgroundTasks num handler de WS).
+                task = session.title_task()
+                if task is not None:
+                    asyncio.create_task(asyncio.to_thread(task))
     except WebSocketDisconnect:
         pass
 
@@ -144,10 +163,16 @@ async def chat(req: ChatRequest, background: BackgroundTasks) -> dict:
 
 
 @app.post("/reset")
-def reset(background: BackgroundTasks) -> dict:
+async def reset(background: BackgroundTasks) -> dict:
     """Começa uma conversa nova. Responde na hora: indexar no RAG, resumir o
-    título e aprender sobre o usuário rodam em segundo plano."""
-    background.add_task(_get_session().detach())
+    título e aprender sobre o usuário rodam em segundo plano.
+
+    Adquire o mesmo _session_lock de /chat e /ws/chat antes de mutar a sessão
+    (detach() limpa _history/last_model de forma síncrona) — sem o lock, um
+    /reset correria com um turno em andamento."""
+    async with _session_lock:
+        task = _get_session().detach()
+    background.add_task(task)
     return {"status": "histórico limpo"}
 
 

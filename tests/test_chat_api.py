@@ -9,6 +9,7 @@ import time
 
 import httpx
 import pytest
+from fastapi import WebSocketDisconnect
 from fastapi.testclient import TestClient
 
 import core.chat as chat_mod
@@ -110,6 +111,18 @@ def test_ws_chat_envia_tokens_e_termina_com_done():
     assert eventos[-1]["model"] == "local"
 
 
+def test_ws_chat_rejeita_origin_nao_permitida():
+    """Handshakes de WebSocket não são cobertos pela same-origin policy do
+    browser — o servidor precisa validar o Origin ele mesmo, senão uma
+    página http:// maliciosa aberta no mesmo browser poderia abrir este
+    WebSocket e ler as respostas da Jade."""
+    client = TestClient(api_mod.app)
+
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/ws/chat", headers={"origin": "http://evil.example"}) as ws:
+            ws.receive_json()
+
+
 def test_ws_chat_erro_no_meio_nao_derruba_a_conexao(monkeypatch):
     """Um erro num turno vira {"type": "error"} (sem "done" depois) — a
     conexão continua aberta para a próxima mensagem."""
@@ -133,6 +146,31 @@ def test_ws_chat_erro_no_meio_nao_derruba_a_conexao(monkeypatch):
         assert tok == {"type": "token", "text": "ok"}
         fim = ws.receive_json()
         assert fim["type"] == "done"
+
+
+def test_ws_chat_agenda_title_task_apos_turno_com_sucesso(monkeypatch):
+    """A Task 6 migrou o chat de texto inteiro pro WebSocket — sem agendar
+    title_task() aqui, o título da conversa só seria refinado no /reset
+    ("novo chat"), nunca durante a conversa em si."""
+    concluiu = threading.Event()
+
+    def _fake_title_task(self, min_turns: int = 2):
+        def _run() -> None:
+            concluiu.set()
+
+        return _run
+
+    monkeypatch.setattr(chat_mod.ChatSession, "title_task", _fake_title_task)
+    client = TestClient(api_mod.app)
+
+    with client.websocket_connect("/ws/chat") as ws:
+        ws.send_json({"message": "oi, tudo bem?"})
+        while True:
+            evento = ws.receive_json()
+            if evento["type"] == "done":
+                break
+
+    assert concluiu.wait(timeout=2)
 
 
 def test_stream_to_ws_drena_fila_ate_o_fim_mesmo_com_falha_no_envio():
