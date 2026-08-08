@@ -98,4 +98,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .spotify-track { padding: 8px 10px; border-radius: 6px; cursor: pointer; color: var(--text);
   font-size: 14px; }
 .spotify-track:hover { background: #14201b; }
+.spotify-playlist-header { padding: 10px 10px 4px; margin-top: 6px; color: var(--muted);
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.spotify-playlist-header:first-child { margin-top: 0; }
 .spotify-card { display: flex; align-items: flex-start; justify-content: center; padding-top: 8px; }
