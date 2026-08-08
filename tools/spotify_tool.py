@@ -16,6 +16,8 @@ fica separada e delega pra core.spotify."""
 
 from __future__ import annotations
 
+import re
+
 from core.config import settings
 from tools.base import JadeTool
 
@@ -47,7 +49,9 @@ def _parse(query: str) -> tuple[str | None, str | None]:
         if not any(h in low for h in _SPOTIFY_HINT):
             return None, None
         term = _strip_prefix(query, _SEARCH)
-        term = term.replace("no spotify", "").replace("spotify", "").strip(" .!?")
+        term = re.sub(r"(?i)\s*no\s+spotify\s*", " ", term)
+        term = re.sub(r"(?i)\bspotify\b", "", term)
+        term = term.strip(" .!?")
         return ("search", term) if term else (None, None)
 
     if any(w in low for w in _PLAY):

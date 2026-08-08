@@ -15,6 +15,10 @@ def test_parse_pesquisa_no_spotify():
     assert _parse("pesquisa bohemian rhapsody no spotify") == ("search", "bohemian rhapsody")
 
 
+def test_parse_pesquisa_preserva_case_do_termo_mesmo_com_spotify_maiusculo():
+    assert _parse("pesquisa Bohemian Rhapsody no Spotify") == ("search", "Bohemian Rhapsody")
+
+
 def test_parse_pesquisa_sem_spotify_nao_e_capturada():
     # Sem "spotify"/"música" na frase, o SystemControlTool cuida da busca web.
     assert _parse("pesquisa gatos fofos no google") == (None, None)
