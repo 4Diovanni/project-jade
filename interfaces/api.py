@@ -46,6 +46,17 @@ def _get_session() -> ChatSession:
     return _session
 
 
+@app.on_event("startup")
+def _startup_spotify_sync() -> None:
+    """Dispara um resync do cache do Spotify em segundo plano, se a conta já
+    estiver conectada e o cache estiver velho — mesmo papel do disparo de
+    sync_vault em ChatSession.__init__, mas na escala do processo da API (o
+    Spotify não tem um "início de sessão" por conversa)."""
+    from core.spotify import start_background_sync_if_stale
+
+    start_background_sync_if_stale()
+
+
 # WebSocket handshakes não passam pela same-origin policy do browser — o
 # servidor precisa validar o Origin ele mesmo. Sem isso, qualquer página
 # http:// aberta no mesmo browser do usuário poderia abrir um WebSocket para
@@ -203,6 +214,84 @@ def search(req: SearchRequest) -> dict:
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Falha na busca: {e}") from e
     return {"results": results}
+
+
+# ── Spotify (Fase 4) ─────────────────────────────────────────
+@app.get("/spotify/login")
+def spotify_login() -> RedirectResponse:
+    """Redireciona para a tela de autorização do Spotify."""
+    from core.spotify import authorize_url
+
+    return RedirectResponse(url=authorize_url())
+
+
+@app.get("/spotify/callback")
+def spotify_callback(
+    code: str | None = None, error: str | None = None, state: str | None = None
+) -> RedirectResponse:
+    """Troca o code por um token, dispara a 1ª sincronização em segundo
+    plano e manda o usuário de volta pro frontend, aba Spotify.
+
+    Valida `state` (proteção CSRF do OAuth2) ANTES de trocar o code — sem
+    isso, qualquer navegação induzida pra esta rota com um `?code=` de
+    outra conta seria aceita, já que a API roda sem autenticação em
+    127.0.0.1 (achado #4 da whole-branch review)."""
+    if error or not code:
+        return RedirectResponse(url="/app/?spotify=erro")
+
+    from core.spotify import handle_callback, start_background_sync_if_stale, validate_state
+
+    if not validate_state(state):
+        logger.warning("Callback do Spotify com state inválido/ausente — possível CSRF.")
+        return RedirectResponse(url="/app/?spotify=erro")
+
+    try:
+        handle_callback(code)
+    except Exception:
+        logger.exception("Falha no callback do Spotify")
+        return RedirectResponse(url="/app/?spotify=erro")
+    start_background_sync_if_stale()
+    return RedirectResponse(url="/app/?spotify=conectado")
+
+
+@app.get("/spotify/status")
+def spotify_status() -> dict:
+    from core.spotify import is_linked
+    from core.spotify_db import last_synced_at, track_count
+
+    return {
+        "linked": is_linked(),
+        "track_count": track_count(),
+        "last_synced_at": last_synced_at(),
+    }
+
+
+@app.get("/spotify/library")
+def spotify_library() -> dict:
+    """Cache completo de faixas, agrupado por playlist ('Curtidas' quando
+    não vem de nenhuma playlist nomeada)."""
+    from core.spotify_db import list_tracks
+
+    grouped: dict[str, list[dict]] = {}
+    for track in list_tracks():
+        key = track["playlist_name"] or "Curtidas"
+        grouped.setdefault(key, []).append(track)
+    return {"playlists": grouped}
+
+
+@app.post("/spotify/sync")
+def spotify_sync() -> dict:
+    """Força um resync completo da biblioteca (síncrono — a resposta só
+    volta quando a sincronização termina)."""
+    from core.spotify import is_linked, sync_library
+
+    if not is_linked():
+        raise HTTPException(status_code=400, detail="Conta Spotify não conectada.")
+    try:
+        n = sync_library(force=True)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Falha ao sincronizar: {e}") from e
+    return {"synced_tracks": n}
 
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"

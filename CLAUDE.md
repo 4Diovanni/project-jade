@@ -91,7 +91,14 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
   determinístico** (cada tool declara `trigger_hints` e valida em `accepts()`;
   sem depender de tool-calling do LLM). `tools/system_tool.py` = controle do
   SO (abrir apps de **whitelist**, volume via teclas de mídia, busca web);
-  `ChatSession` roteia p/ tool antes do RAG. Falta: Spotify e e-mail.
+  `ChatSession` roteia p/ tool antes do RAG. Falta: e-mail.
+- **Spotify:** `SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET` em `core/config.py`
+  (settings); `core/spotify.py` = OAuth (com `state` anti-CSRF), sync da
+  biblioteca (Curtidas + playlists) e reprodução via Spotify Connect;
+  `core/spotify_db.py` = cache local em SQLite; `tools/spotify_tool.py` =
+  roteamento determinístico ("toca/pesquisa/sincroniza"); rotas
+  `/spotify/login` `/callback` `/status` `/library` `/sync` em
+  `interfaces/api.py`; aba própria no frontend (`interfaces/frontend/spotify.js`).
 
 - **Roteador dual-model** (`core/model_router.py`): `ChatSession` decide entre
   **Qwen3 (local)** e **Claude (nuvem)** por turno. Heurística determinística:
@@ -117,7 +124,7 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
   **decisões** da Jade (rota, tool, recall@k do RAG) de forma determinística.
   O baseline vive em `bench/reports/`.
 
-**Próximo:** Spotify e e-mail (Fase 4) · WhatsApp.
+**Próximo:** e-mail (Fase 4) · WhatsApp.
 
 ## Workflow de git (OBRIGATÓRIO)
 Nunca commitar direto na `main` (branch protection ativa). Toda mudança: criar

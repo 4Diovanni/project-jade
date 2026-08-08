@@ -7,7 +7,12 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="layout">
+  <div class="tabbar" role="tablist" aria-label="Views">
+    <button id="tab-chat" class="tab active" role="tab" aria-selected="true">Chat</button>
+    <button id="tab-spotify" class="tab" role="tab" aria-selected="false">Spotify</button>
+  </div>
+
+  <main id="view-chat" class="layout">
     <aside class="threads" aria-label="Conversas">
       <button id="new-chat" class="new-chat">+ Novo</button>
       <ul id="threads-list" class="threads-list"></ul>
@@ -28,6 +33,19 @@
       <div id="orb-status" class="orb-status">ociosa</div>
       <button id="mute-btn" class="mute-btn" type="button" aria-pressed="false">🔊</button>
     </aside>
+  </main>
+
+  <main id="view-spotify" class="view-spotify" hidden>
+    <div class="spotify-toolbar">
+      <input id="spotify-filter" class="spotify-filter" type="text"
+             placeholder="Filtrar por nome ou artista…" />
+      <button id="spotify-sync-btn" class="spotify-sync-btn" type="button">Sincronizar agora</button>
+      <span id="spotify-status" class="spotify-status"></span>
+    </div>
+    <div class="spotify-body">
+      <ul id="spotify-list" class="spotify-list"></ul>
+      <div id="spotify-card" class="spotify-card"></div>
+    </div>
   </main>
 
   <script type="module" src="app.js"></script>

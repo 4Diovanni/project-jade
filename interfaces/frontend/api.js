@@ -74,3 +74,21 @@ export async function voiceChat(blob) {
   if (!res.ok) throw new Error(`/voice/chat → ${res.status}`);
   return res.json();
 }
+
+export const getSpotifyStatus = () =>
+  fetch("/spotify/status").then((r) => {
+    if (!r.ok) throw new Error(`/spotify/status → ${r.status}`);
+    return r.json();
+  });
+
+export const getSpotifyLibrary = () =>
+  fetch("/spotify/library").then((r) => {
+    if (!r.ok) throw new Error(`/spotify/library → ${r.status}`);
+    return r.json();
+  });
+
+export const syncSpotifyNow = () =>
+  fetch("/spotify/sync", { method: "POST" }).then((r) => {
+    if (!r.ok) throw new Error(`/spotify/sync → ${r.status}`);
+    return r.json();
+  });
