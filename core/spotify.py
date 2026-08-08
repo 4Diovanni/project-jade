@@ -142,32 +142,48 @@ def sync_library(force: bool = False) -> int:
     playlists = sp.current_user_playlists(limit=50)
     while playlists:
         for playlist in playlists["items"]:
-            # additional_types=("track",) filtra episódios de podcast no
-            # nível da API — sem isso, playlist_items devolve episódios
-            # misturados com faixas (achado #2 da whole-branch review).
-            items = sp.playlist_items(playlist["id"], limit=100, additional_types=("track",))
-            while items:
-                for item in items["items"]:
-                    track = item.get("track")
-                    # Defesa extra: episódios de podcast (não filtrados pela
-                    # API por algum motivo), faixas locais e faixas
-                    # indisponíveis não têm os campos que _to_track_row
-                    # precisa (artists, external_urls.spotify, id) — pula,
-                    # não deixa estourar KeyError e abortar o sync inteiro.
-                    if (
-                        not track
-                        or track.get("type") not in (None, "track")
-                        or not track.get("id")
-                        or not track.get("artists")
-                        or not track.get("external_urls", {}).get("spotify")
-                    ):
-                        continue
-                    tracks.append(
-                        _to_track_row(
-                            track, playlist_id=playlist["id"], playlist_name=playlist["name"]
+            try:
+                # additional_types=("track",) filtra episódios de podcast no
+                # nível da API — sem isso, playlist_items devolve episódios
+                # misturados com faixas (achado #2 da whole-branch review).
+                items = sp.playlist_items(playlist["id"], limit=100, additional_types=("track",))
+                while items:
+                    for item in items["items"]:
+                        track = item.get("track")
+                        # Defesa extra: episódios de podcast (não filtrados pela
+                        # API por algum motivo), faixas locais e faixas
+                        # indisponíveis não têm os campos que _to_track_row
+                        # precisa (artists, external_urls.spotify, id) — pula,
+                        # não deixa estourar KeyError e abortar o sync inteiro.
+                        if (
+                            not track
+                            or track.get("type") not in (None, "track")
+                            or not track.get("id")
+                            or not track.get("artists")
+                            or not track.get("external_urls", {}).get("spotify")
+                        ):
+                            continue
+                        tracks.append(
+                            _to_track_row(
+                                track, playlist_id=playlist["id"], playlist_name=playlist["name"]
+                            )
                         )
-                    )
-                items = sp.next(items) if items.get("next") else None
+                    items = sp.next(items) if items.get("next") else None
+            except Exception:
+                # Playlists geradas pelo Spotify (Feita Pra Você, Daily Mix,
+                # Discover Weekly...) aparecem em current_user_playlists mas
+                # a leitura de itens pode devolver 403 — não é um erro do
+                # usuário nem da Jade, é uma restrição da própria API. Sem
+                # isolar por playlist, essa exceção abortava sync_library()
+                # inteiro ANTES do upsert_tracks, perdendo até as Curtidas
+                # já coletadas em memória.
+                logger.warning(
+                    "Não consegui ler a playlist %r (%s) — pulando.",
+                    playlist.get("name"),
+                    playlist.get("id"),
+                    exc_info=True,
+                )
+                continue
         playlists = sp.next(playlists) if playlists.get("next") else None
 
     n = upsert_tracks(tracks)

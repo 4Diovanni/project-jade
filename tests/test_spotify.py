@@ -47,12 +47,14 @@ class FakeSpotifyClient:
         saved_tracks=None,
         playlists=None,
         playlist_items=None,
+        playlist_items_por_id=None,
         devices=None,
         search_result=None,
     ):
         self._saved_tracks = saved_tracks or {"items": [], "next": None}
         self._playlists = playlists or {"items": [], "next": None}
         self._playlist_items = playlist_items or {"items": [], "next": None}
+        self._playlist_items_por_id = playlist_items_por_id
         self._devices = devices if devices is not None else []
         self._search_result = search_result or {"tracks": {"items": []}}
         self.started_playback = None
@@ -68,6 +70,11 @@ class FakeSpotifyClient:
         self.playlist_items_calls.append(
             {"playlist_id": playlist_id, "limit": limit, "additional_types": additional_types}
         )
+        if self._playlist_items_por_id is not None:
+            resultado = self._playlist_items_por_id.get(playlist_id)
+            if isinstance(resultado, Exception):
+                raise resultado
+            return resultado
         return self._playlist_items
 
     def next(self, page):
@@ -272,6 +279,65 @@ def test_sync_library_pula_episodio_de_podcast_e_faixa_local(monkeypatch):
     assert search_by_name("faixa local") is None
     # additional_types=("track",) já filtra a maioria no nível da API.
     assert fake_client.playlist_items_calls[0]["additional_types"] == ("track",)
+
+
+def test_sync_library_pula_playlist_que_da_erro_mas_preserva_curtidas(monkeypatch, caplog):
+    """Playlists geradas pelo Spotify (Feita Pra Você, Daily Mix...) podem
+    devolver 403 em playlist_items mesmo aparecendo em
+    current_user_playlists. Sem isolar por playlist, essa exceção abortava
+    sync_library() inteiro antes do upsert — as Curtidas, já coletadas em
+    memória, eram perdidas junto."""
+    monkeypatch.setattr(spotify_mod.settings, "SPOTIFY_CLIENT_ID", "id")
+    monkeypatch.setattr(spotify_mod.settings, "SPOTIFY_CLIENT_SECRET", "secret")
+    monkeypatch.setattr(
+        spotify_mod,
+        "get_auth_manager",
+        lambda: FakeAuthManager(token={"access_token": "x"}, valid=True),
+    )
+    faixa_valida = {
+        "type": "track",
+        "id": "2",
+        "name": "Imagine",
+        "artists": [{"name": "John Lennon"}],
+        "external_urls": {"spotify": "https://open.spotify.com/track/2"},
+    }
+    fake_client = FakeSpotifyClient(
+        saved_tracks={
+            "items": [
+                {
+                    "track": {
+                        "id": "1",
+                        "name": "Bohemian Rhapsody",
+                        "artists": [{"name": "Queen"}],
+                        "external_urls": {"spotify": "https://open.spotify.com/track/1"},
+                    }
+                }
+            ],
+            "next": None,
+        },
+        playlists={
+            "items": [
+                {"id": "proibida", "name": "Feita Pra Você"},
+                {"id": "ok", "name": "Minha Playlist"},
+            ],
+            "next": None,
+        },
+        playlist_items_por_id={
+            "proibida": Exception("403 Forbidden"),
+            "ok": {"items": [{"track": faixa_valida}], "next": None},
+        },
+    )
+    monkeypatch.setattr(spotify_mod, "get_client", lambda: fake_client)
+
+    with caplog.at_level("WARNING"):
+        n = spotify_mod.sync_library(force=True)
+
+    assert n == 2
+    from core.spotify_db import search_by_name
+
+    assert search_by_name("bohemian rhapsody") is not None
+    assert search_by_name("imagine") is not None
+    assert "Feita Pra Você" in caplog.text
 
 
 def test_sync_safe_loga_excecao_em_vez_de_engolir_silenciosamente(monkeypatch, caplog):

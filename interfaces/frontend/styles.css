@@ -10,6 +10,13 @@
 * { box-sizing: border-box; }
 body { margin: 0; height: 100vh; overflow: hidden; background: var(--bg); color: var(--text);
   font-family: system-ui, sans-serif; }
+/* .layout/.view-spotify definem `display` diretamente, o que empata em
+   especificidade com a regra padrão do navegador `[hidden] { display: none }`
+   — e empate de especificidade é decidido por origem, onde CSS de autor
+   sempre vence CSS de user-agent. Sem isto, as duas views ficam sempre
+   visíveis ao mesmo tempo (uma embaixo da outra, cortada por body overflow:
+   hidden), e o atributo `hidden` do HTML nunca some visualmente. */
+[hidden] { display: none !important; }
 /* grid-template-rows: minmax(0,1fr) trava a linha na altura da viewport, para
    as colunas não esticarem com o conteúdo — só os containers internos rolam. */
 .layout { display: grid; grid-template-columns: 18% 52% 30%; grid-template-rows: minmax(0, 1fr);
