@@ -12,6 +12,7 @@ dispara o sync vira o startup da API (ver start_background_sync_if_stale)."""
 from __future__ import annotations
 
 import logging
+import secrets
 import threading
 from datetime import datetime, timedelta
 
@@ -33,6 +34,14 @@ _SCOPE = (
 
 _sync_thread: threading.Thread | None = None
 _sync_lock = threading.Lock()
+
+# Proteção CSRF do fluxo OAuth (parâmetro `state` padrão do OAuth2): guarda
+# só o último state gerado — a Jade é single-user/local, não precisa de um
+# store mais elaborado. Sem isso, /spotify/callback aceitava qualquer
+# `?code=` recebido, o que (a API roda sem autenticação em 127.0.0.1) abria
+# risco teórico de uma página maliciosa induzir a navegação pro callback com
+# o code de outra conta (achado #4 da whole-branch review).
+_pending_state: str | None = None
 
 
 class NoActiveDeviceError(Exception):
@@ -72,7 +81,20 @@ def is_linked() -> bool:
 
 
 def authorize_url() -> str:
-    return get_auth_manager().get_authorize_url()
+    global _pending_state
+    _pending_state = secrets.token_urlsafe(16)
+    return get_auth_manager().get_authorize_url(state=_pending_state)
+
+
+def validate_state(received_state: str | None) -> bool:
+    """Compara o `state` recebido em /spotify/callback com o gerado pela
+    última chamada a `authorize_url()`. Limpa `_pending_state` depois de
+    checar (sempre, válido ou não) para não ser reutilizável — cada
+    tentativa de login usa um state novo."""
+    global _pending_state
+    expected = _pending_state
+    _pending_state = None
+    return expected is not None and received_state == expected
 
 
 def handle_callback(code: str) -> None:

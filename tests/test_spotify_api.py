@@ -29,6 +29,7 @@ def test_spotify_login_redireciona_para_authorize_url(monkeypatch):
 
 def test_spotify_callback_sucesso(monkeypatch):
     chamado = {}
+    monkeypatch.setattr("core.spotify.validate_state", lambda state: True)
     monkeypatch.setattr(
         "core.spotify.handle_callback", lambda code: chamado.setdefault("code", code)
     )
@@ -38,7 +39,7 @@ def test_spotify_callback_sucesso(monkeypatch):
     )
     client = TestClient(api_mod.app)
 
-    resp = client.get("/spotify/callback?code=abc123", follow_redirects=False)
+    resp = client.get("/spotify/callback?code=abc123&state=validstate", follow_redirects=False)
 
     assert resp.headers["location"] == "/app/?spotify=conectado"
     assert chamado == {"code": "abc123", "sync": True}
@@ -61,15 +62,33 @@ def test_spotify_callback_com_erro_da_spotify_redireciona_erro():
 
 
 def test_spotify_callback_handle_callback_falha(monkeypatch):
+    monkeypatch.setattr("core.spotify.validate_state", lambda state: True)
+
     def _explode(code):
         raise RuntimeError("code inválido")
 
     monkeypatch.setattr("core.spotify.handle_callback", _explode)
     client = TestClient(api_mod.app)
 
-    resp = client.get("/spotify/callback?code=ruim", follow_redirects=False)
+    resp = client.get("/spotify/callback?code=ruim&state=validstate", follow_redirects=False)
 
     assert resp.headers["location"] == "/app/?spotify=erro"
+
+
+def test_spotify_callback_state_invalido_redireciona_erro(monkeypatch):
+    # Achado #4 da whole-branch review: state ausente/errado é rejeitado
+    # ANTES de handle_callback ser chamado (proteção CSRF do OAuth2).
+    chamado = {"handle_callback": False}
+    monkeypatch.setattr(
+        "core.spotify.handle_callback", lambda code: chamado.__setitem__("handle_callback", True)
+    )
+    monkeypatch.setattr("core.spotify.validate_state", lambda state: False)
+    client = TestClient(api_mod.app)
+
+    resp = client.get("/spotify/callback?code=X&state=invalido", follow_redirects=False)
+
+    assert resp.headers["location"] == "/app/?spotify=erro"
+    assert chamado["handle_callback"] is False
 
 
 def test_spotify_status(monkeypatch):

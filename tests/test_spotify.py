@@ -31,7 +31,8 @@ class FakeAuthManager:
             raise RuntimeError("refresh falhou")
         return token
 
-    def get_authorize_url(self):
+    def get_authorize_url(self, state=None):
+        self.received_state = state
         return self._url
 
     def get_access_token(self, code, as_dict=False):
@@ -86,8 +87,10 @@ class FakeSpotifyClient:
 def _isola_spotify(monkeypatch, tmp_path):
     monkeypatch.setattr(spotify_mod.settings, "SQLITE_PATH", str(tmp_path / "t.db"))
     spotify_mod._sync_thread = None
+    spotify_mod._pending_state = None
     yield
     spotify_mod._sync_thread = None
+    spotify_mod._pending_state = None
 
 
 def test_is_linked_false_sem_credenciais(monkeypatch):
@@ -130,6 +133,42 @@ def test_authorize_url_delega_pro_auth_manager(monkeypatch):
         spotify_mod, "get_auth_manager", lambda: FakeAuthManager(url="https://x/authorize")
     )
     assert spotify_mod.authorize_url() == "https://x/authorize"
+
+
+def test_authorize_url_gera_state_e_e_aceito_por_validate_state(monkeypatch):
+    fake = FakeAuthManager(url="https://x/authorize")
+    monkeypatch.setattr(spotify_mod, "get_auth_manager", lambda: fake)
+
+    url = spotify_mod.authorize_url()
+
+    assert url == "https://x/authorize"
+    assert fake.received_state  # gerou e passou um state não-vazio
+    assert spotify_mod.validate_state(fake.received_state) is True
+
+
+def test_validate_state_rejeita_state_errado(monkeypatch):
+    fake = FakeAuthManager(url="https://x/authorize")
+    monkeypatch.setattr(spotify_mod, "get_auth_manager", lambda: fake)
+    spotify_mod.authorize_url()
+
+    assert spotify_mod.validate_state("um-state-que-nao-foi-gerado") is False
+
+
+def test_validate_state_sem_pending_state_rejeita():
+    # Nenhum login foi iniciado (_pending_state é None) — qualquer state
+    # recebido é rejeitado, inclusive None.
+    assert spotify_mod.validate_state(None) is False
+    assert spotify_mod.validate_state("qualquer-coisa") is False
+
+
+def test_validate_state_nao_e_reutilizavel(monkeypatch):
+    fake = FakeAuthManager(url="https://x/authorize")
+    monkeypatch.setattr(spotify_mod, "get_auth_manager", lambda: fake)
+    spotify_mod.authorize_url()
+
+    assert spotify_mod.validate_state(fake.received_state) is True
+    # segunda checagem com o MESMO state falha — já foi consumido.
+    assert spotify_mod.validate_state(fake.received_state) is False
 
 
 def test_handle_callback_troca_code_por_token(monkeypatch):

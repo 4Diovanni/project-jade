@@ -226,13 +226,24 @@ def spotify_login() -> RedirectResponse:
 
 
 @app.get("/spotify/callback")
-def spotify_callback(code: str | None = None, error: str | None = None) -> RedirectResponse:
+def spotify_callback(
+    code: str | None = None, error: str | None = None, state: str | None = None
+) -> RedirectResponse:
     """Troca o code por um token, dispara a 1ª sincronização em segundo
-    plano e manda o usuário de volta pro frontend, aba Spotify."""
+    plano e manda o usuário de volta pro frontend, aba Spotify.
+
+    Valida `state` (proteção CSRF do OAuth2) ANTES de trocar o code — sem
+    isso, qualquer navegação induzida pra esta rota com um `?code=` de
+    outra conta seria aceita, já que a API roda sem autenticação em
+    127.0.0.1 (achado #4 da whole-branch review)."""
     if error or not code:
         return RedirectResponse(url="/app/?spotify=erro")
 
-    from core.spotify import handle_callback, start_background_sync_if_stale
+    from core.spotify import handle_callback, start_background_sync_if_stale, validate_state
+
+    if not validate_state(state):
+        logger.warning("Callback do Spotify com state inválido/ausente — possível CSRF.")
+        return RedirectResponse(url="/app/?spotify=erro")
 
     try:
         handle_callback(code)
