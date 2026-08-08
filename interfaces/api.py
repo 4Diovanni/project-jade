@@ -237,6 +237,7 @@ def spotify_callback(code: str | None = None, error: str | None = None) -> Redir
     try:
         handle_callback(code)
     except Exception:
+        logger.exception("Falha no callback do Spotify")
         return RedirectResponse(url="/app/?spotify=erro")
     start_background_sync_if_stale()
     return RedirectResponse(url="/app/?spotify=conectado")
