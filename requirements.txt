@@ -22,7 +22,7 @@ python-multipart>=0.0.9      # upload de áudio na API
 # pyttsx3>=2.90              # TTS 100% offline (opcional)
 
 # ── Fase 3+/4: Mãos (descomente ao chegar na fase) ───────────
-# spotipy                       # módulo Spotify
+spotipy>=2.24                   # módulo Spotify (OAuth + Web API)
 # pyautogui                     # controle do SO
 # google-api-python-client      # Gmail / Calendar
 # whatsapp: serviço Node separado (interfaces/whatsapp_bot/) — fase futura

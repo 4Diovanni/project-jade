@@ -133,6 +133,25 @@ class Settings:
     API_HOST: str = os.getenv("JADE_API_HOST", "127.0.0.1")
     API_PORT: int = int(os.getenv("JADE_API_PORT", "8000"))
 
+    # ── Spotify (Fase 4) ──
+    # Credenciais do app registrado no Spotify Developer Dashboard.
+    SPOTIFY_CLIENT_ID: str = os.getenv("SPOTIFY_CLIENT_ID", "")
+    SPOTIFY_CLIENT_SECRET: str = os.getenv("SPOTIFY_CLIENT_SECRET", "")
+    # Precisa bater EXATAMENTE com o Redirect URI cadastrado no Dashboard.
+    SPOTIFY_REDIRECT_URI: str = os.getenv(
+        "SPOTIFY_REDIRECT_URI", f"http://{API_HOST}:{API_PORT}/spotify/callback"
+    )
+    # Token OAuth persistido localmente — nunca vai pro git (ver .gitignore).
+    SPOTIFY_TOKEN_CACHE_PATH: str = os.getenv(
+        "SPOTIFY_TOKEN_CACHE_PATH", str(BASE_DIR / "database" / "spotify_token.json")
+    )
+    # Acima disso (em horas), o cache local de faixas é considerado velho e
+    # sync_library() refaz a busca completa na próxima chamada.
+    SPOTIFY_LIBRARY_STALE_HOURS: int = int(os.getenv("SPOTIFY_LIBRARY_STALE_HOURS", "24"))
+    SPOTIFY_TOOL_ENABLED: bool = (
+        os.getenv("JADE_SPOTIFY_TOOL_ENABLED", "true").strip().lower() != "false"
+    )
+
     # Pastas/arquivos do vault que NUNCA devem ser indexados no RAG.
     # Comparado contra CADA parte do caminho relativo, então serve tanto para
     # pastas quanto para nomes de arquivo soltos.
