@@ -1,0 +1,201 @@
+"""Integração com Spotify — OAuth, sincronização da biblioteca (Curtidas +
+playlists) no cache local (core.spotify_db) e reprodução via Spotify
+Connect (Fase 4).
+
+Fica inteiramente síncrono, como core/chat.py — a ponte com o mundo
+assíncrono do FastAPI vive só nas rotas de interfaces/api.py. O sync em
+background segue o mesmo padrão de core/chat.py::ChatSession._ensure_synced
+(RAG), mas na escala do processo: como a Jade só tem uma conta Spotify
+linkada por vez (não uma por sessão de chat), o "início de sessão" que
+dispara o sync vira o startup da API (ver start_background_sync_if_stale)."""
+
+from __future__ import annotations
+
+import contextlib
+import threading
+from datetime import datetime, timedelta
+
+from core.config import settings
+from core.spotify_db import (
+    last_synced_at as _last_synced_at,
+)
+from core.spotify_db import (
+    search_by_name,
+    set_last_synced_at,
+    upsert_tracks,
+)
+
+_SCOPE = (
+    "user-library-read playlist-read-private user-modify-playback-state user-read-playback-state"
+)
+
+_sync_thread: threading.Thread | None = None
+_sync_lock = threading.Lock()
+
+
+class NoActiveDeviceError(Exception):
+    """Nenhum dispositivo Spotify (app aberto em algum lugar) disponível."""
+
+
+def get_auth_manager():
+    import spotipy
+    from spotipy.oauth2 import CacheFileHandler
+
+    return spotipy.oauth2.SpotifyOAuth(
+        client_id=settings.SPOTIFY_CLIENT_ID,
+        client_secret=settings.SPOTIFY_CLIENT_SECRET,
+        redirect_uri=settings.SPOTIFY_REDIRECT_URI,
+        scope=_SCOPE,
+        cache_handler=CacheFileHandler(cache_path=settings.SPOTIFY_TOKEN_CACHE_PATH),
+    )
+
+
+def get_client():
+    import spotipy
+
+    return spotipy.Spotify(auth_manager=get_auth_manager())
+
+
+def is_linked() -> bool:
+    if not settings.SPOTIFY_CLIENT_ID or not settings.SPOTIFY_CLIENT_SECRET:
+        return False
+    auth = get_auth_manager()
+    try:
+        token = auth.cache_handler.get_cached_token()
+        if not token:
+            return False
+        return bool(auth.validate_token(token))
+    except Exception:
+        return False
+
+
+def authorize_url() -> str:
+    return get_auth_manager().get_authorize_url()
+
+
+def handle_callback(code: str) -> None:
+    get_auth_manager().get_access_token(code, as_dict=False)
+
+
+def _to_track_row(track: dict, *, playlist_id: str | None, playlist_name: str | None) -> dict:
+    return {
+        "id": track["id"],
+        "name": track["name"],
+        "artists": ", ".join(a["name"] for a in track["artists"]),
+        "url": track["external_urls"]["spotify"],
+        "playlist_id": playlist_id,
+        "playlist_name": playlist_name,
+    }
+
+
+def sync_library(force: bool = False) -> int:
+    """Busca Curtidas + todas as playlists salvas e grava no cache local.
+    Sem `force`, é no-op se o cache tiver menos de
+    SPOTIFY_LIBRARY_STALE_HOURS. Devolve quantas faixas foram gravadas."""
+    if not is_linked():
+        return 0
+    if not force:
+        last = _last_synced_at()
+        if last is not None:
+            try:
+                last_dt = datetime.fromisoformat(last)
+            except ValueError:
+                last_dt = None
+            if last_dt is not None and datetime.now() - last_dt < timedelta(
+                hours=settings.SPOTIFY_LIBRARY_STALE_HOURS
+            ):
+                return 0
+
+    sp = get_client()
+    tracks: list[dict] = []
+
+    saved = sp.current_user_saved_tracks(limit=50)
+    while saved:
+        for item in saved["items"]:
+            tracks.append(_to_track_row(item["track"], playlist_id=None, playlist_name="Curtidas"))
+        saved = sp.next(saved) if saved.get("next") else None
+
+    playlists = sp.current_user_playlists(limit=50)
+    while playlists:
+        for playlist in playlists["items"]:
+            items = sp.playlist_items(playlist["id"], limit=100)
+            while items:
+                for item in items["items"]:
+                    track = item.get("track")
+                    if track is None:
+                        continue
+                    tracks.append(
+                        _to_track_row(
+                            track, playlist_id=playlist["id"], playlist_name=playlist["name"]
+                        )
+                    )
+                items = sp.next(items) if items.get("next") else None
+        playlists = sp.next(playlists) if playlists.get("next") else None
+
+    n = upsert_tracks(tracks)
+    set_last_synced_at(datetime.now().isoformat())
+    return n
+
+
+def _sync_safe() -> None:
+    """Alvo da thread de background — blindado (exceções numa thread não
+    propagam pro join(), então a proteção fica aqui, não em _ensure_synced)."""
+    with contextlib.suppress(Exception):
+        sync_library()
+
+
+def start_background_sync_if_stale() -> None:
+    """Dispara sync_library() numa thread se a conta estiver linkada e não
+    houver uma sync já em andamento. Chamado uma vez no startup da API
+    (interfaces/api.py) — equivalente ao disparo em ChatSession.__init__
+    para o RAG, mas na escala do processo."""
+    global _sync_thread
+    with _sync_lock:
+        if _sync_thread is not None and _sync_thread.is_alive():
+            return
+        if not is_linked():
+            return
+        _sync_thread = threading.Thread(target=_sync_safe, daemon=True)
+        _sync_thread.start()
+
+
+def _ensure_synced() -> None:
+    """Espera a sincronização em background terminar, se houver uma
+    rodando — custo zero se já tiver terminado. NÃO dispara uma nova (quem
+    decide iniciar é start_background_sync_if_stale)."""
+    global _sync_thread
+    with _sync_lock:
+        thread = _sync_thread
+    if thread is not None:
+        thread.join()
+        with _sync_lock:
+            if _sync_thread is thread:
+                _sync_thread = None
+
+
+def find_track(name: str) -> dict | None:
+    """Busca só no cache local — nunca toca a API."""
+    _ensure_synced()
+    return search_by_name(name)
+
+
+def search_track(query: str) -> list[dict]:
+    """Busca só na Web API — nunca toca o cache."""
+    if not is_linked():
+        return []
+    sp = get_client()
+    results = sp.search(q=query, type="track", limit=5)
+    items = results.get("tracks", {}).get("items", [])
+    return [_to_track_row(t, playlist_id=None, playlist_name=None) for t in items]
+
+
+def play(track_id: str) -> str:
+    """Manda tocar via Spotify Connect no dispositivo ativo (ou no
+    primeiro disponível). Devolve o nome do dispositivo."""
+    sp = get_client()
+    devices = sp.devices().get("devices", [])
+    if not devices:
+        raise NoActiveDeviceError("Nenhum dispositivo Spotify ativo.")
+    device = next((d for d in devices if d.get("is_active")), devices[0])
+    sp.start_playback(device_id=device["id"], uris=[f"spotify:track:{track_id}"])
+    return device["name"]
