@@ -11,7 +11,7 @@ dispara o sync vira o startup da API (ver start_background_sync_if_stale)."""
 
 from __future__ import annotations
 
-import contextlib
+import logging
 import threading
 from datetime import datetime, timedelta
 
@@ -24,6 +24,8 @@ from core.spotify_db import (
     set_last_synced_at,
     upsert_tracks,
 )
+
+logger = logging.getLogger(__name__)
 
 _SCOPE = (
     "user-library-read playlist-read-private user-modify-playback-state user-read-playback-state"
@@ -118,11 +120,25 @@ def sync_library(force: bool = False) -> int:
     playlists = sp.current_user_playlists(limit=50)
     while playlists:
         for playlist in playlists["items"]:
-            items = sp.playlist_items(playlist["id"], limit=100)
+            # additional_types=("track",) filtra episódios de podcast no
+            # nível da API — sem isso, playlist_items devolve episódios
+            # misturados com faixas (achado #2 da whole-branch review).
+            items = sp.playlist_items(playlist["id"], limit=100, additional_types=("track",))
             while items:
                 for item in items["items"]:
                     track = item.get("track")
-                    if track is None:
+                    # Defesa extra: episódios de podcast (não filtrados pela
+                    # API por algum motivo), faixas locais e faixas
+                    # indisponíveis não têm os campos que _to_track_row
+                    # precisa (artists, external_urls.spotify, id) — pula,
+                    # não deixa estourar KeyError e abortar o sync inteiro.
+                    if (
+                        not track
+                        or track.get("type") not in (None, "track")
+                        or not track.get("id")
+                        or not track.get("artists")
+                        or not track.get("external_urls", {}).get("spotify")
+                    ):
                         continue
                     tracks.append(
                         _to_track_row(
@@ -139,9 +155,14 @@ def sync_library(force: bool = False) -> int:
 
 def _sync_safe() -> None:
     """Alvo da thread de background — blindado (exceções numa thread não
-    propagam pro join(), então a proteção fica aqui, não em _ensure_synced)."""
-    with contextlib.suppress(Exception):
+    propagam pro join(), então a proteção fica aqui, não em _ensure_synced).
+    Loga antes de suprimir: uma falha de sync silenciosa deixava o cache
+    vazio pra sempre sem nenhuma pista do motivo (achado #2 da whole-branch
+    review)."""
+    try:
         sync_library()
+    except Exception:
+        logger.exception("Falha ao sincronizar biblioteca do Spotify")
 
 
 def start_background_sync_if_stale() -> None:

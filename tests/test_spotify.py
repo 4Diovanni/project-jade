@@ -40,12 +40,22 @@ class FakeAuthManager:
 
 
 class FakeSpotifyClient:
-    def __init__(self, *, saved_tracks=None, playlists=None, devices=None, search_result=None):
+    def __init__(
+        self,
+        *,
+        saved_tracks=None,
+        playlists=None,
+        playlist_items=None,
+        devices=None,
+        search_result=None,
+    ):
         self._saved_tracks = saved_tracks or {"items": [], "next": None}
         self._playlists = playlists or {"items": [], "next": None}
+        self._playlist_items = playlist_items or {"items": [], "next": None}
         self._devices = devices if devices is not None else []
         self._search_result = search_result or {"tracks": {"items": []}}
         self.started_playback = None
+        self.playlist_items_calls: list[dict] = []
 
     def current_user_saved_tracks(self, limit=50):
         return self._saved_tracks
@@ -53,8 +63,11 @@ class FakeSpotifyClient:
     def current_user_playlists(self, limit=50):
         return self._playlists
 
-    def playlist_items(self, playlist_id, limit=100):
-        return {"items": [], "next": None}
+    def playlist_items(self, playlist_id, limit=100, additional_types=None):
+        self.playlist_items_calls.append(
+            {"playlist_id": playlist_id, "limit": limit, "additional_types": additional_types}
+        )
+        return self._playlist_items
 
     def next(self, page):
         return None
@@ -159,6 +172,79 @@ def test_sync_library_popula_o_cache(monkeypatch):
     encontrada = search_by_name("bohemian rhapsody")
     assert encontrada is not None
     assert encontrada["artists"] == "Queen"
+
+
+def test_sync_library_pula_episodio_de_podcast_e_faixa_local(monkeypatch):
+    """Achado #2 da whole-branch review: playlist_items pode devolver
+    episódios de podcast (sem "artists") e faixas locais (sem
+    external_urls.spotify) misturados com faixas normais. Sem o guard, o
+    primeiro item desses estoura KeyError em _to_track_row e aborta o
+    sync inteiro antes do upsert — nenhuma faixa é salva."""
+    monkeypatch.setattr(spotify_mod.settings, "SPOTIFY_CLIENT_ID", "id")
+    monkeypatch.setattr(spotify_mod.settings, "SPOTIFY_CLIENT_SECRET", "secret")
+    monkeypatch.setattr(
+        spotify_mod,
+        "get_auth_manager",
+        lambda: FakeAuthManager(token={"access_token": "x"}, valid=True),
+    )
+    episodio = {
+        "type": "episode",
+        "id": "ep1",
+        "name": "Episódio de Podcast",
+    }
+    faixa_local = {
+        "type": "track",
+        "id": "local1",
+        "name": "Faixa Local",
+        "artists": [{"name": "Alguém"}],
+        "is_local": True,
+        "external_urls": {},
+    }
+    faixa_valida = {
+        "type": "track",
+        "id": "2",
+        "name": "Imagine",
+        "artists": [{"name": "John Lennon"}],
+        "external_urls": {"spotify": "https://open.spotify.com/track/2"},
+    }
+    fake_client = FakeSpotifyClient(
+        playlists={
+            "items": [{"id": "p1", "name": "Minha Playlist"}],
+            "next": None,
+        },
+        playlist_items={
+            "items": [
+                {"track": episodio},
+                {"track": faixa_local},
+                {"track": faixa_valida},
+            ],
+            "next": None,
+        },
+    )
+    monkeypatch.setattr(spotify_mod, "get_client", lambda: fake_client)
+
+    n = spotify_mod.sync_library(force=True)
+
+    assert n == 1
+    from core.spotify_db import search_by_name
+
+    assert search_by_name("imagine") is not None
+    assert search_by_name("episodio de podcast") is None
+    assert search_by_name("faixa local") is None
+    # additional_types=("track",) já filtra a maioria no nível da API.
+    assert fake_client.playlist_items_calls[0]["additional_types"] == ("track",)
+
+
+def test_sync_safe_loga_excecao_em_vez_de_engolir_silenciosamente(monkeypatch, caplog):
+    def _explode(force=False):
+        raise RuntimeError("falha simulada de sync")
+
+    monkeypatch.setattr(spotify_mod, "sync_library", _explode)
+
+    with caplog.at_level("ERROR"):
+        spotify_mod._sync_safe()
+
+    assert "Falha ao sincronizar" in caplog.text
 
 
 def test_sync_library_nao_forcado_e_recente_e_no_op(monkeypatch):
