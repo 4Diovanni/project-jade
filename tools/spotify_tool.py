@@ -26,6 +26,25 @@ _SEARCH = ("pesquisa", "pesquise", "procura", "procure", "busca", "busque")
 _SYNC = ("sincroniza", "sincronize", "atualiza minha música", "atualiza minhas músicas")
 _SPOTIFY_HINT = ("spotify", "música", "musica", "músicas", "musicas")
 
+# "toca"/"coloca"/etc. são comandos imperativos — só contam se abrirem a
+# mensagem, âncorados com `^` e delimitados por `\b` (palavra inteira). Sem
+# isso, substring matching sequestra conversa normal: "compõe", "propõe",
+# "estoque" contêm "põe"/"poe" mas não são comandos de tocar música (ver
+# achado #1 da whole-branch review, docs/superpowers/plans/2026-08-08-spotify-integracao.md).
+_PLAY_RE = re.compile(
+    r"^\s*(?:" + "|".join(_PLAY) + r")\b\s*(.*)$",
+    re.IGNORECASE,
+)
+# search/sync não precisam estar no início (podem vir depois de "e agora "),
+# mas ainda assim usam \b — palavra inteira, não substring — para a mesma
+# robustez. O hint obrigatório de "spotify"/"música" já reduz bastante o
+# risco prático aqui, mas a classe de bug é a mesma do ramo `play`.
+_SEARCH_RE = re.compile(r"\b(?:" + "|".join(_SEARCH) + r")\b", re.IGNORECASE)
+_SYNC_RE = re.compile(
+    r"\b(?:sincroniza|sincronize|atualiza\s+minhas?\s+m[uú]sicas?)\b", re.IGNORECASE
+)
+_SPOTIFY_HINT_RE = re.compile(r"\b(?:spotify|m[uú]sicas?)\b", re.IGNORECASE)
+
 
 def _strip_prefix(text: str, prefixes: tuple[str, ...]) -> str:
     low = text.lower()
@@ -42,11 +61,11 @@ def _parse(query: str) -> tuple[str | None, str | None]:
     None (não é comando de Spotify)."""
     low = query.lower().strip()
 
-    if any(w in low for w in _SYNC) and any(h in low for h in _SPOTIFY_HINT):
+    if _SYNC_RE.search(low) and _SPOTIFY_HINT_RE.search(low):
         return "sync", None
 
-    if any(w in low for w in _SEARCH):
-        if not any(h in low for h in _SPOTIFY_HINT):
+    if _SEARCH_RE.search(low):
+        if not _SPOTIFY_HINT_RE.search(low):
             return None, None
         term = _strip_prefix(query, _SEARCH)
         term = re.sub(r"(?i)\s*no\s+spotify\s*", " ", term)
@@ -54,8 +73,9 @@ def _parse(query: str) -> tuple[str | None, str | None]:
         term = term.strip(" .!?")
         return ("search", term) if term else (None, None)
 
-    if any(w in low for w in _PLAY):
-        term = _strip_prefix(query, _PLAY).strip(" .!?")
+    m = _PLAY_RE.match(query)
+    if m:
+        term = m.group(1).strip(" :.!?")
         return ("play", term) if term else (None, None)
 
     return None, None

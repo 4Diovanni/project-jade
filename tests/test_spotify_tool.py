@@ -32,6 +32,18 @@ def test_parse_nao_e_comando_de_spotify():
     assert _parse("como você está hoje?") == (None, None)
 
 
+def test_parse_nao_captura_conversa_normal_com_substrings_parecidas():
+    # Substring matching antigo sequestrava essas frases (achado #1 da
+    # whole-branch review): "põe"/"poe" aparecem dentro de "propõe",
+    # "compõe", "poesia"; "coloca" dentro de "colocar".
+    assert _parse("me escreve um poema sobre o mar") == (None, None)
+    assert _parse("o que voce propõe pra melhorar isso?") == (None, None)
+    assert _parse("como se compõe uma sinfonia?") == (None, None)
+    assert _parse("qual o estoque do almoxarifado?") == (None, None)
+    assert _parse("voce pode colocar meus compromissos em ordem?") == (None, None)
+    assert _parse("poesia e importante pra voce?") == (None, None)
+
+
 def test_accepts_evita_falso_positivo():
     assert tool.accepts("toca bohemian rhapsody") is True
     assert tool.accepts("me conte uma piada") is False
