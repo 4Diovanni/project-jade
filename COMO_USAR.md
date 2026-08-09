@@ -10,7 +10,7 @@ seu computador.
 
 1. **Ollama** (o cérebro local) — instale em <https://ollama.com/download> e baixe os modelos:
    ```powershell
-   ollama pull llama3            # conversa
+   ollama pull qwen3:8b          # conversa (tool-calling nativo, PT-BR sólido)
    ollama pull nomic-embed-text  # memória (RAG do Obsidian)
    ```
    Deixe o Ollama rodando (ele fica na bandeja do Windows).
@@ -40,11 +40,13 @@ Digite e converse. Comandos especiais:
 - `/reset` — começa uma conversa nova
 - `/sair` — encerra
 
-### Subir a API (para o navegador, apps e futuramente WhatsApp)
+### Subir a API + dashboard web
 ```powershell
 python main.py
 ```
-Abra <http://127.0.0.1:8000/docs> — uma interface web (Swagger) onde você testa
+Abra <http://127.0.0.1:8000/app/> — o **dashboard web** (chat com streaming,
+voz, aba Spotify, histórico de conversas). Ou use
+<http://127.0.0.1:8000/docs> — interface Swagger onde você testa a API
 **tudo clicando**, inclusive enviando áudios.
 
 ---
@@ -146,9 +148,9 @@ quando fizer sentido.
 
 **Dois cérebros (roteador dual-model):** se você configurar uma `ANTHROPIC_API_KEY`,
 o Jade manda perguntas **informativas/complexas** (ex.: "como preparar tal receita")
-para o **Claude** (nuvem, mais capaz), e mantém no **llama3** (local) a conversa
+para o **Claude** (nuvem, mais capaz), e mantém no **Qwen3** (local) a conversa
 comum e tudo que toca suas **notas pessoais** — privacidade. Sem chave, fica 100%
-no llama3. No chat, um selo `☁️claude` indica quando a resposta veio da nuvem.
+no Qwen3. No chat, um selo `☁️claude` indica quando a resposta veio da nuvem.
 
 > A chave vem do <https://console.anthropic.com> (uso pago por token) — é
 > **diferente** da assinatura Claude Pro do site/app, que não dá acesso à API.
@@ -162,8 +164,12 @@ Com `python main.py` rodando (`http://127.0.0.1:8000`):
 | Método | Rota | O que faz |
 |---|---|---|
 | GET | `/health` | status do serviço |
-| POST | `/chat` | conversar — corpo `{"message": "..."}` |
+| WS | `/ws/chat` | conversar com streaming (token a token) — usado pelo dashboard |
+| POST | `/chat` | conversar (sem streaming) — corpo `{"message": "..."}` |
 | POST | `/reset` | limpa o histórico da conversa |
+| GET | `/conversations` | lista as conversas salvas (notas `.md`), mais recente primeiro |
+| GET | `/conversations/{id}` | retorna uma conversa (turnos parseados) |
+| PATCH | `/conversations/{id}` | renomeia o título de uma conversa |
 | POST | `/index` | (re)indexa o vault do Obsidian |
 | POST | `/search` | busca nas notas — `{"query": "...", "k": 4}` |
 | POST | `/voice/transcribe` | áudio (upload) → texto |
@@ -174,8 +180,10 @@ Com `python main.py` rodando (`http://127.0.0.1:8000`):
 | GET | `/spotify/status` | conta linkada? quantas faixas no cache? última sync? |
 | GET | `/spotify/library` | cache de faixas, agrupado por playlist |
 | POST | `/spotify/sync` | força um resync completo da biblioteca |
+| GET | `/app/` | dashboard web (chat, voz, Spotify, histórico) |
 
-O jeito mais fácil de experimentar é pelo **Swagger** em `/docs`.
+O jeito mais fácil de experimentar é pelo **dashboard** (`/app`) ou pelo
+**Swagger** em `/docs`.
 
 ---
 
@@ -201,7 +209,7 @@ As opções que você provavelmente vai querer mexer:
 | Variável | Padrão | Para quê |
 |---|---|---|
 | `JADE_LLM_PROVIDER` | `ollama` | `ollama` (local), `openai`, `anthropic`, `gemini` |
-| `OLLAMA_MODEL` | `llama3` | modelo de conversa |
+| `OLLAMA_MODEL` | `qwen3:8b` | modelo de conversa (local) |
 | `OBSIDIAN_VAULT_PATH` | `./obsidian_notes` | onde ficam as notas/memória |
 | `JADE_WHISPER_MODEL` | `base` | precisão da transcrição: `tiny` < `base` < `small` |
 | `JADE_TTS_VOICE` | `pt-BR-FranciscaNeural` | voz (ex.: `pt-BR-AntonioNeural`) |

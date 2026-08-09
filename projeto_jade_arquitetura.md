@@ -169,13 +169,24 @@ ao usuário dono dela (`JADE_USER_NAME`, ex.: Giovanni). Implementado:
 Meta de longo prazo: a partir do corpus acumulado, **imitar ideias, tom e
 preferências** do usuário — aproximando-se de sentimentos/ideias baseados nele.
 
-### C. Roteamento dual-model (Claude + llama3) — ✅ implementado
+### C. Roteamento dual-model (Claude + Qwen3) — ✅ implementado
 Dois "modos de IA" com um **roteador** (`core/model_router.py`) que escolhe o
 modelo por tipo de tarefa:
-- **llama3 (local):** ações comuns, rápidas e rastreáveis pela memória/PC —
+- **Qwen3:8b (local):** ações comuns, rápidas e rastreáveis pela memória/PC —
   ex.: renomear uma pasta, comandos simples, coisas já presentes no vault.
+  Tool-calling nativo e PT-BR sólido; substituiu o `llama3` original do plano.
 - **Claude (nuvem):** raciocínio mais complexo e informativo — ex.: "como
   preparar tal receita", análises que exigem conhecimento amplo.
 - Objetivo: privacidade e custo baixos por padrão (local), recorrendo à nuvem só
-  quando agrega. *(Nota técnica: assinatura Claude Pro ≠ API da Anthropic; a
-  forma de acesso será definida na implementação desta fase.)*
+  quando agrega. *(Nota técnica: assinatura Claude Pro ≠ API da Anthropic — a
+  chave vem do console.anthropic.com.)*
+
+### D. Spotify & controle do sistema — ✅ implementado (Fase 4)
+- **Spotify** (`core/spotify.py`, `tools/spotify_tool.py`): OAuth2 com `state`
+  anti-CSRF, sync da biblioteca (Curtidas + playlists) em cache SQLite local
+  (`core/spotify_db.py`), tocar/pesquisar por comando de voz/texto e aba
+  própria no dashboard (`interfaces/frontend/spotify.js`).
+- **Controle do SO** (`tools/system_tool.py`): abrir apps de uma whitelist,
+  volume via teclas de mídia, busca web — roteamento determinístico, sem
+  depender de tool-calling do LLM.
+- Falta na Fase 4: e-mail.
