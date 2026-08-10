@@ -99,7 +99,10 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
   extensão C e falha sem Visual C++ Build Tools no Windows. Roda como
   processo próprio, desacoplado da API (sessão de chat independente, como o
   CLI). Foco de janela do navegador e integração com o orb do frontend ficam
-  fora de escopo por enquanto.
+  fora de escopo por enquanto. **Dependências em `requirements-wakeword.txt`,
+  fora do `requirements.txt` padrão** — `openwakeword` puxa `tflite-runtime`
+  no Linux sem wheel pra Python 3.12+, quebraria o CI; instale com
+  `pip install -r requirements-wakeword.txt` só se for usar o recurso.
 
 - Fase 4 (As Mãos — em progresso): `core/agent_router.py` faz **roteamento
   determinístico** (cada tool declara `trigger_hints` e valida em `accepts()`;

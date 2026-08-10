@@ -31,6 +31,12 @@ você.
 
 ## Passo a passo
 
+0. **Instale as dependências opcionais do wake-word** (não vêm no
+   `requirements.txt` padrão — ver o motivo em `requirements-wakeword.txt`):
+   ```
+   pip install -r requirements-wakeword.txt
+   ```
+
 1. **Abra o notebook oficial de treino.**
    - Rápido e simples (< 1h, sem precisar mexer em código):
      [Colab — treino automático](https://colab.research.google.com/drive/1q1oe2zOyZp7UsB3jJiQ1IFn8z5YfjwEb?usp=sharing)

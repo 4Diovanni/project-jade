@@ -177,11 +177,16 @@ Testes que dependem de microfone/modelo real de verdade ficam fora do CI
 ## Arquivos afetados
 
 - **Novos:** `interfaces/wakeword_service.py`; `tests/test_wakeword.py`;
-  `docs/wakeword_treino.md` (passo a passo pra gerar o modelo custom).
+  `docs/wakeword_treino.md` (passo a passo pra gerar o modelo custom);
+  `requirements-wakeword.txt` (`openwakeword`, `sounddevice` — **fora** de
+  `requirements.txt`/`requirements-dev.txt` de propósito: `openwakeword`
+  exige `tflite-runtime` no Linux mesmo usando só o backend ONNX, sem wheel
+  pra Python 3.12+, o que quebraria o CI e o `pip-audit`; instalação
+  opcional, só quem for usar o wake-word roda
+  `pip install -r requirements-wakeword.txt`).
 - **Alterados:** `interfaces/voice_service.py` (`transcribe`: vad_filter,
   beam_size, initial_prompt); `core/config.py` + `.env.example` (settings
-  novas + `WHISPER_MODEL` default); `main.py` (comando `listen`);
-  `requirements.txt` (`openwakeword`, `sounddevice`); `CLAUDE.md`
+  novas + `WHISPER_MODEL` default); `main.py` (comando `listen`); `CLAUDE.md`
   (Estado atual); `docs/superpowers/specs/2026-07-24-frontend-jade-shell-voz-design.md`
   (marcar #3 como implementado, com a ressalva do foco de janela fora de escopo).
 
