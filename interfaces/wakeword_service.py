@@ -168,15 +168,41 @@ def _record_command(stream) -> bytes:
 
 
 # ── Loop principal ──
-def listen_forever(session: ChatSession, *, speak: Callable[[str], None] | None = None) -> None:
+def listen_forever(
+    session: ChatSession | None = None,
+    *,
+    speak: Callable[[str], None] | None = None,
+    respond: Callable[[str], None] | None = None,
+    on_wake: Callable[[], None] | None = None,
+    on_thinking: Callable[[], None] | None = None,
+) -> None:
     """Ouve o wake-word continuamente; a cada ativação, grava o comando,
-    transcreve, manda pra sessão de chat e fala a resposta. Bloqueia até
-    `KeyboardInterrupt`."""
-    import numpy as np
-    import sounddevice as sd
+    transcreve e repassa o texto pra `respond`. Bloqueia até `KeyboardInterrupt`.
+
+    Por padrão (`respond=None`), cada comando é processado com
+    `session.send()` + fala local (`voice_service.speak`) — o caminho do
+    `python main.py listen` standalone, que por isso precisa de `session`.
+
+    Quando integrado à API (`interfaces/api.py`), `respond` substitui esse
+    processamento inteiro (sessão/lock compartilhados com `/chat` e
+    `/voice/chat`, turno distribuído pro frontend via WebSocket em vez de
+    falado localmente) — `session` deixa de ser necessário.
+
+    `on_wake`/`on_thinking` são ganchos opcionais de UI (chamados na
+    ativação e ao começar a processar, sem esperar resposta); não fazem
+    nada por padrão."""
+    if respond is None:
+        if session is None:
+            raise ValueError("listen_forever precisa de 'session' ou 'respond'.")
+        speak_fn = speak or voice_service.speak
+
+        def respond(text: str) -> None:
+            speak_fn(session.send(text))
 
     model = _load_model()
-    speak = speak or voice_service.speak
+
+    import numpy as np
+    import sounddevice as sd
 
     print(f"👂 Ouvindo 'ok jade'... (Ctrl+C para sair, limiar={settings.WAKEWORD_THRESHOLD})")
     with sd.InputStream(
@@ -189,10 +215,15 @@ def listen_forever(session: ChatSession, *, speak: Callable[[str], None] | None 
             if score < settings.WAKEWORD_THRESHOLD:
                 continue
 
+            if on_wake:
+                on_wake()
             play_activation_tone()
             pcm = _record_command(stream)
             play_deactivation_tone()
             model.reset()
+
+            if on_thinking:
+                on_thinking()
 
             audio_path = None
             try:
@@ -202,8 +233,7 @@ def listen_forever(session: ChatSession, *, speak: Callable[[str], None] | None 
                 text = voice_service.transcribe(audio_path)
                 if not text.strip():
                     continue
-                reply = session.send(text)
-                speak(reply)
+                respond(text)
             except Exception as e:
                 print(f"⚠️ Falha ao processar o comando: {e}")
             finally:

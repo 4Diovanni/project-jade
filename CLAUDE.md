@@ -96,13 +96,18 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
   sobre o gerador de dados sintéticos ser só em inglês) e
   `docs/superpowers/specs/2026-08-09-wakeword-precisao-voz-design.md`.
   Endpointing por energia (RMS) em vez de `webrtcvad`: a lib exige compilar
-  extensão C e falha sem Visual C++ Build Tools no Windows. Roda como
-  processo próprio, desacoplado da API (sessão de chat independente, como o
-  CLI). Foco de janela do navegador e integração com o orb do frontend ficam
-  fora de escopo por enquanto. **Dependências em `requirements-wakeword.txt`,
-  fora do `requirements.txt` padrão** — `openwakeword` puxa `tflite-runtime`
-  no Linux sem wheel pra Python 3.12+, quebraria o CI; instale com
-  `pip install -r requirements-wakeword.txt` só se for usar o recurso.
+  extensão C e falha sem Visual C++ Build Tools no Windows. Dois modos: como
+  processo próprio (`python main.py listen`, sessão de chat independente,
+  como o CLI) ou **integrado à API** — com `JADE_WAKEWORD_ENABLED=true` e o
+  servidor rodando, `_startup_wakeword` (`interfaces/api.py`) sobe a escuta
+  numa thread de fundo usando a mesma sessão/lock de `/chat`; cada turno é
+  distribuído pra toda aba de `/ws/chat` conectada (`_broadcast`), o orb
+  reage (`listening`/`thinking`/`speaking`) e a fala sai pelo `<audio>` do
+  navegador. Foco de janela do navegador segue fora de escopo. **Dependências
+  em `requirements-wakeword.txt`, fora do `requirements.txt` padrão** —
+  `openwakeword` puxa `tflite-runtime` no Linux sem wheel pra Python 3.12+,
+  quebraria o CI; instale com `pip install -r requirements-wakeword.txt` só
+  se for usar o recurso.
 
 - Fase 4 (As Mãos — em progresso): `core/agent_router.py` faz **roteamento
   determinístico** (cada tool declara `trigger_hints` e valida em `accepts()`;

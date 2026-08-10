@@ -23,6 +23,31 @@ test("error chama onError com o detail", () => {
   assert.equal(recebido, "boom");
 });
 
+test("wake_listening chama onWakeListening sem argumento", () => {
+  let chamou = false;
+  _handleChatEvent({ type: "wake_listening" }, { onWakeListening: () => { chamou = true; } });
+  assert.equal(chamou, true);
+});
+
+test("wake_thinking chama onWakeThinking sem argumento", () => {
+  let chamou = false;
+  _handleChatEvent({ type: "wake_thinking" }, { onWakeThinking: () => { chamou = true; } });
+  assert.equal(chamou, true);
+});
+
+test("wake_turn chama onWakeTurn com o payload inteiro", () => {
+  let recebido = null;
+  const payload = { type: "wake_turn", transcription: "toca sweet dreams", reply: "bora", audio_url: "/voice/audio/x.mp3", model: "local" };
+  _handleChatEvent(payload, { onWakeTurn: (d) => { recebido = d; } });
+  assert.deepEqual(recebido, payload);
+});
+
+test("wake_error chama onWakeError com o detail", () => {
+  let recebido = null;
+  _handleChatEvent({ type: "wake_error", detail: "boom" }, { onWakeError: (d) => { recebido = d; } });
+  assert.equal(recebido, "boom");
+});
+
 test("tipo desconhecido não chama nenhum handler", () => {
   let chamou = false;
   const marcar = () => { chamou = true; };
