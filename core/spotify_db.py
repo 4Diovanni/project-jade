@@ -5,11 +5,16 @@ este subprojeto, Fase 4 — ver core/config.py)."""
 
 from __future__ import annotations
 
+import difflib
 import sqlite3
 import unicodedata
 from pathlib import Path
 
 from core.config import settings
+
+#: score mínimo (difflib.SequenceMatcher.ratio()) pra `search_similar`
+#: considerar uma faixa "parecida" — abaixo disso é ruído, não sugestão.
+SIMILARITY_MIN_SCORE = 0.6
 
 
 def _normalize(text: str) -> str:
@@ -85,6 +90,42 @@ def search_by_name(name: str) -> dict | None:
         if alvo in _normalize(row["name"]) or alvo in _normalize(row["artists"]):
             return dict(row)
     return None
+
+
+def search_similar(name: str, limit: int = 3) -> list[dict]:
+    """Faixas mais parecidas com `name` no cache local (fallback de
+    `search_by_name`, que é match exato/substring — "não fuzzy" por
+    design). Usa `difflib.SequenceMatcher` (stdlib, sem dependência nova)
+    sobre nome e "nome + artista" normalizados; cada faixa devolvida ganha
+    uma chave `score` (0–1). Ordenado por score decrescente, só faixas
+    acima de `SIMILARITY_MIN_SCORE` — abaixo disso a sugestão vira ruído
+    (tocar a faixa errada é pior que não tocar nenhuma)."""
+    alvo = _normalize(name)
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, name, artists, url, playlist_id, playlist_name FROM spotify_tracks"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    scored: list[tuple[float, dict]] = []
+    for row in rows:
+        nome = _normalize(row["name"])
+        nome_e_artista = _normalize(f"{row['name']} {row['artists']}")
+        score = max(
+            difflib.SequenceMatcher(None, alvo, nome).ratio(),
+            difflib.SequenceMatcher(None, alvo, nome_e_artista).ratio(),
+        )
+        if score >= SIMILARITY_MIN_SCORE:
+            scored.append((score, dict(row)))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    resultado = []
+    for score, track in scored[:limit]:
+        track["score"] = score
+        resultado.append(track)
+    return resultado
 
 
 def list_tracks() -> list[dict]:

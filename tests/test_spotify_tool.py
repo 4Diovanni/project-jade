@@ -11,6 +11,17 @@ def test_parse_toca():
     assert _parse("coloca imagine dragons") == ("play", "imagine dragons")
 
 
+def test_parse_remove_filler_word_antes_do_nome():
+    # Log real (Issue #42): "toque a música 13 bala" falhava porque o termo
+    # extraído carregava "a música" grudado no nome.
+    assert _parse("toque a música 13 bala") == ("play", "13 bala")
+    assert _parse("toca a canção Imagine") == ("play", "Imagine")
+    assert _parse("pesquisa a música bohemian rhapsody no spotify") == (
+        "search",
+        "bohemian rhapsody",
+    )
+
+
 def test_parse_pesquisa_no_spotify():
     assert _parse("pesquisa bohemian rhapsody no spotify") == ("search", "bohemian rhapsody")
 
@@ -80,11 +91,67 @@ def test_run_play_track_encontrada_e_tocada(monkeypatch):
     assert tool.run("toca bohemian rhapsody") == "Tocando Bohemian Rhapsody no Celular."
 
 
-def test_run_play_track_nao_encontrada(monkeypatch):
+def test_run_play_track_nao_encontrada_sem_similar(monkeypatch):
     monkeypatch.setattr("core.spotify.is_linked", lambda: True)
     monkeypatch.setattr("core.spotify.find_track", lambda name: None)
+    monkeypatch.setattr("core.spotify.find_similar", lambda name, limit=3: [])
     resposta = tool.run("toca uma musica que nao existe")
     assert "Não achei" in resposta
+    assert "Quer que eu pesquise" in resposta
+
+
+def test_run_play_com_filler_word_encontra_faixa_exata(monkeypatch):
+    # Issue #42/log real: "toca a música 13 bala" não pode falhar só porque
+    # o termo extraído tinha "a música" na frente do nome exato da faixa.
+    monkeypatch.setattr("core.spotify.is_linked", lambda: True)
+    chamadas = []
+
+    def _find_track(name):
+        chamadas.append(name)
+        return {"id": "1", "name": "13 Bala"} if name == "13 bala" else None
+
+    monkeypatch.setattr("core.spotify.find_track", _find_track)
+    monkeypatch.setattr("core.spotify.play", lambda track_id: "Celular")
+    resposta = tool.run("toca a música 13 bala")
+    assert chamadas == ["13 bala"]
+    assert resposta == "Tocando 13 Bala no Celular."
+
+
+def test_run_play_sem_match_exato_toca_candidato_confiante(monkeypatch):
+    monkeypatch.setattr("core.spotify.is_linked", lambda: True)
+    monkeypatch.setattr("core.spotify.find_track", lambda name: None)
+    monkeypatch.setattr(
+        "core.spotify.find_similar",
+        lambda name, limit=3: [
+            {"id": "1", "name": "Bohemian Rhapsody", "artists": "Queen", "score": 0.95},
+            {"id": "2", "name": "Outra faixa", "artists": "Alguém", "score": 0.4},
+        ],
+    )
+    monkeypatch.setattr("core.spotify.play", lambda track_id: "Celular")
+    resposta = tool.run("toca bohemian rapsody")
+    assert "toquei 'Bohemian Rhapsody'" in resposta
+    assert "Celular" in resposta
+
+
+def test_run_play_candidatos_ambiguos_lista_opcoes_sem_tocar(monkeypatch):
+    monkeypatch.setattr("core.spotify.is_linked", lambda: True)
+    monkeypatch.setattr("core.spotify.find_track", lambda name: None)
+    monkeypatch.setattr(
+        "core.spotify.find_similar",
+        lambda name, limit=3: [
+            {"id": "1", "name": "13 Bala", "artists": "Nebrugg", "score": 0.8},
+            {"id": "2", "name": "6Balas", "artists": "kamaitachi", "score": 0.75},
+        ],
+    )
+
+    def _play_nao_deveria_rodar(track_id):
+        raise AssertionError("não deveria tocar automaticamente quando é ambíguo")
+
+    monkeypatch.setattr("core.spotify.play", _play_nao_deveria_rodar)
+    resposta = tool.run("toca bala")
+    assert "Você quis dizer" in resposta
+    assert "13 Bala — Nebrugg" in resposta
+    assert "6Balas — kamaitachi" in resposta
 
 
 def test_run_play_sem_dispositivo_ativo(monkeypatch):

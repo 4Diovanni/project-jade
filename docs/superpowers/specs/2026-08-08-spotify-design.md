@@ -345,13 +345,18 @@ tool.accepts() → kind="sync"
 
 ## Riscos
 
-- **`search_by_name` é `LIKE` simples, não fuzzy matching de verdade.** Um
-  pedido "toca bohemian rapsody" (erro de digitação/fala) pode não bater com
-  "Bohemian Rhapsody" no cache. Aceito para o MVP — se se mostrar um
-  problema recorrente no uso real (a Jade recebe comandos por voz via STT,
-  que já introduz variação), é um upgrade localizado em
-  `search_by_name()` (ex.: `difflib.get_close_matches`), não uma mudança de
-  arquitetura.
+- **`search_by_name` é `LIKE` simples, não fuzzy matching de verdade.**
+  Confirmado como problema recorrente no uso real (Issue #42) — endereçado:
+  `core/spotify_db.py::search_similar` faz fallback fuzzy sobre o cache
+  (`difflib.SequenceMatcher`, sem dependência nova) quando `search_by_name`
+  não acha exato. `tools/spotify_tool.py::_run_play_fuzzy` decide entre
+  tocar direto (1 candidato claramente melhor, margem ≥
+  `_SIMILAR_CONFIDENT_MARGIN`) ou listar opções (candidatos próximos entre
+  si) — nunca escolhe sozinha entre opções ambíguas, pra não tocar a faixa
+  errada. Extração do termo (`tools/spotify_tool.py::_strip_filler`) também
+  passou a remover preenchimento comum ("a música", "a canção"...) antes de
+  comparar — sem isso, "toca a música X" nunca batia com "X" exato no
+  cache, mesmo sem nenhum erro de digitação.
 - **Spotify Connect exige um dispositivo já aberto em algum lugar.** Sem o
   app desktop/celular rodando, "toca X" sempre falha com o erro de "nenhum
   dispositivo ativo" — é uma limitação aceita da escolha de não usar o Web

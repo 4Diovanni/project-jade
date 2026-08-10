@@ -54,6 +54,24 @@ def _strip_prefix(text: str, prefixes: tuple[str, ...]) -> str:
     return text.strip()
 
 
+# "toca a música 13 bala" teria "a música 13 bala" como termo (tudo depois do
+# verbo) — mais longo que o nome real da faixa, então nunca bate no match
+# exato de `search_by_name` (que exige o termo INTEIRO como substring do
+# nome). Sem isso, qualquer "toca a música/canção/faixa X" falhava mesmo com
+# X exato no cache (bug real reportado — ver Issue #42).
+_FILLER_PREFIXES = ("a música", "a musica", "a canção", "a cancao", "a faixa", "o som")
+
+
+def _strip_filler(term: str) -> str:
+    low = term.lower().strip()
+    for prefix in _FILLER_PREFIXES:
+        if low == prefix:
+            return ""
+        if low.startswith(prefix + " "):
+            return term[len(prefix) + 1 :].strip()
+    return term
+
+
 def _parse(query: str) -> tuple[str | None, str | None]:
     """Interpreta o comando. Retorna (tipo, valor) sem efeitos colaterais.
 
@@ -70,12 +88,12 @@ def _parse(query: str) -> tuple[str | None, str | None]:
         term = _strip_prefix(query, _SEARCH)
         term = re.sub(r"(?i)\s*no\s+spotify\s*", " ", term)
         term = re.sub(r"(?i)\bspotify\b", "", term)
-        term = term.strip(" .!?")
+        term = _strip_filler(term.strip(" .!?"))
         return ("search", term) if term else (None, None)
 
     m = _PLAY_RE.match(query)
     if m:
-        term = m.group(1).strip(" :.!?")
+        term = _strip_filler(m.group(1).strip(" :.!?"))
         return ("play", term) if term else (None, None)
 
     return None, None
@@ -116,6 +134,17 @@ _NAO_CONECTADO = (
 )
 
 
+#: quanto o 1º candidato precisa liderar o 2º (em score) pra tocar direto
+#: sem perguntar — abaixo disso, a diferença é pequena demais pra escolher
+#: sozinha (arriscaria tocar a faixa errada).
+_SIMILAR_CONFIDENT_MARGIN = 0.15
+
+_SEM_DISPOSITIVO = (
+    "Não achei nenhum Spotify aberto pra tocar. Abre o app no computador "
+    "ou celular e tenta de novo."
+)
+
+
 def _run_play(name: str) -> str:
     import core.spotify as spotify
 
@@ -123,15 +152,37 @@ def _run_play(name: str) -> str:
         return _NAO_CONECTADO
     track = spotify.find_track(name)
     if track is None:
-        return f"Não achei '{name}' na sua biblioteca. Quer que eu pesquise no Spotify?"
+        return _run_play_fuzzy(name, spotify)
     try:
         device = spotify.play(track["id"])
     except spotify.NoActiveDeviceError:
-        return (
-            "Não achei nenhum Spotify aberto pra tocar. Abre o app no computador "
-            "ou celular e tenta de novo."
-        )
+        return _SEM_DISPOSITIVO
     return f"Tocando {track['name']} no {device}."
+
+
+def _run_play_fuzzy(name: str, spotify) -> str:
+    """Fallback quando não há match exato: sugere/corrige com base no
+    cache local (difflib), em vez de só devolver "não achei" (Issue #42)."""
+    candidatos = spotify.find_similar(name)
+    if not candidatos:
+        return f"Não achei '{name}' na sua biblioteca. Quer que eu pesquise no Spotify?"
+
+    melhor = candidatos[0]
+    confiante = len(candidatos) == 1 or (
+        melhor["score"] - candidatos[1]["score"] >= _SIMILAR_CONFIDENT_MARGIN
+    )
+    if confiante:
+        try:
+            device = spotify.play(melhor["id"])
+        except spotify.NoActiveDeviceError:
+            return _SEM_DISPOSITIVO
+        return (
+            f"Não achei '{name}' exato, toquei '{melhor['name']}' "
+            f"(mais parecido da sua biblioteca) no {device}."
+        )
+
+    linhas = [f"{i}. {t['name']} — {t['artists']}" for i, t in enumerate(candidatos, start=1)]
+    return f"Não achei '{name}' exato. Você quis dizer:\n" + "\n".join(linhas) + "\nMe diga qual."
 
 
 def _run_search(term: str) -> str:
