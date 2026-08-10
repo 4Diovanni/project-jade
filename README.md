@@ -94,6 +94,14 @@ pip install -r requirements-dev.txt
 pre-commit install
 ```
 
+## 🤝 Como contribuir
+
+Toda tarefa — **Correção**, **Melhoria** ou **Nova função** — começa por uma
+**Issue** e entra na `main` por **Pull Request**, com `Closes #<n>` no corpo.
+Nada de commit direto na `main`. O fluxo completo está em
+[`AGENTS.md`](./AGENTS.md) (resumo para agentes de IA) e em
+[`CLAUDE.md`](./CLAUDE.md) (guia canônico do projeto).
+
 ---
 
 *Construído com auxílio de skills do Claude Code (ver `.claude/skills/`).*

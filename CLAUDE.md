@@ -148,7 +148,34 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
 
 **Próximo:** e-mail (Fase 4) · WhatsApp.
 
-## Workflow de git (OBRIGATÓRIO)
-Nunca commitar direto na `main` (branch protection ativa). Toda mudança: criar
-branch (`feat/…`) → commit → `git push -u origin <branch>` → `gh pr create` →
-CI/Security/CodeQL verdes → `gh pr merge`.
+## Workflow de trabalho (OBRIGATÓRIO — Issue → branch → PR)
+Vale para **qualquer agente, de qualquer modelo**, e para humanos. Nada entra na
+`main` sem Issue e sem PR. Regra de ouro: **nenhum trabalho sem Issue, nenhum PR
+sem `Closes #<n>`.**
+
+1. **Issue primeiro.** Toda tarefa — *Correção*, *Melhoria* ou *Nova função* —
+   nasce como Issue no GitHub, criada **antes** de escrever código:
+   `gh issue create --title "<tipo>: <resumo>" --label <label> --body "..."`
+   - Título no mesmo padrão do commit (`fix:`, `feat:`, `docs:`, `refactor:`,
+     `chore:`), em PT-BR.
+   - Corpo com **Contexto/Problema**, **Proposta** e **Critérios de aceite**.
+   - Labels: `bug` (correção) · `enhancement` (melhoria/nova função) ·
+     `documentation` (docs).
+   - Entrega grande = uma Issue guarda-chuva + Issues filhas. Nunca uma Issue
+     genérica cobrindo várias entregas independentes.
+   - Se o usuário pedir algo direto no chat, **abra a Issue mesmo assim** — ela é
+     o registro rastreável do pedido.
+2. **Branch a partir da `main` atualizada**, nomeada pela Issue: `fix/<slug>`,
+   `feat/<slug>`, `docs/<slug>`. Nunca commitar direto na `main` (branch
+   protection ativa).
+3. **Commits** pequenos, em PT-BR, no formato Conventional Commits.
+4. **PR citando a Issue** — obrigatório. A primeira linha do corpo traz a
+   palavra-chave de fechamento, para o GitHub linkar e fechar a Issue no merge:
+   `Closes #<n>` (ou `Fixes #<n>` em correções). PR sem essa menção não merge.
+   O corpo segue `.github/pull_request_template.md`: **o que muda**, **por quê**,
+   **como testar**, checklist de qualidade.
+   `git push -u origin <branch> && gh pr create`
+5. **CI verde** — `ci.yml`, `security.yml`, `codeql.yml` — mais os comandos
+   locais da seção *Qualidade & Segurança* antes de pedir review.
+6. **Merge = deploy.** Só via `gh pr merge`. Depois, confira que a Issue fechou
+   sozinha; se não fechou, feche manualmente citando o PR.
