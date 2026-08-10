@@ -70,9 +70,15 @@ def synthesize(
     *,
     backend: str | None = None,
     voice: str | None = None,
+    rate: str | None = None,
+    pitch: str | None = None,
 ) -> Path:
     """Gera um arquivo de áudio a partir do texto. Retorna o caminho REAL gerado
-    (com a extensão correta: .mp3 no backend edge, .wav no pyttsx3)."""
+    (com a extensão correta: .mp3 no backend edge, .wav no pyttsx3).
+
+    `rate`/`pitch` só valem para o backend "edge" (formato do próprio
+    edge-tts: `"+10%"`, `"-20Hz"`...) — ajustam a prosódia pra soar menos
+    "robô". Sem efeito no pyttsx3 (SAPI5 não tem controle de pitch)."""
     backend = (backend or settings.TTS_BACKEND).lower()
     if backend not in _EXT_BY_BACKEND:
         raise ValueError(f"Backend de TTS desconhecido: {backend!r} (use 'edge' ou 'pyttsx3').")
@@ -81,27 +87,40 @@ def synthesize(
     out.parent.mkdir(parents=True, exist_ok=True)
 
     if backend == "edge":
-        _synthesize_edge(text, out, voice or settings.TTS_VOICE)
+        _synthesize_edge(
+            text,
+            out,
+            voice or settings.TTS_VOICE,
+            rate=rate or settings.TTS_RATE,
+            pitch=pitch or settings.TTS_PITCH,
+        )
     else:  # pyttsx3
         _synthesize_pyttsx3(text, out)
     return out
 
 
-def synthesize_reply(text: str, *, backend: str | None = None, voice: str | None = None) -> Path:
+def synthesize_reply(
+    text: str,
+    *,
+    backend: str | None = None,
+    voice: str | None = None,
+    rate: str | None = None,
+    pitch: str | None = None,
+) -> Path:
     """Salva uma fala do Jade como arquivo de áudio (mp3, por padrão) em
     `settings.AUDIO_OUTPUT_DIR`, com nome carimbado por data/hora. Retorna o caminho."""
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     destino = settings.AUDIO_OUTPUT_DIR / f"jade_{stamp}"
-    return synthesize(text, destino, backend=backend, voice=voice)
+    return synthesize(text, destino, backend=backend, voice=voice, rate=rate, pitch=pitch)
 
 
-def _synthesize_edge(text: str, out: Path, voice: str) -> None:
+def _synthesize_edge(text: str, out: Path, voice: str, *, rate: str, pitch: str) -> None:
     import asyncio
 
     import edge_tts
 
     async def _run() -> None:
-        await edge_tts.Communicate(text, voice).save(str(out))
+        await edge_tts.Communicate(text, voice, rate=rate, pitch=pitch).save(str(out))
 
     try:
         asyncio.get_running_loop()
@@ -130,7 +149,13 @@ def _synthesize_pyttsx3(text: str, out: Path) -> None:
     engine.runAndWait()
 
 
-def speak(text: str, *, backend: str | None = None) -> None:
+def speak(
+    text: str,
+    *,
+    backend: str | None = None,
+    rate: str | None = None,
+    pitch: str | None = None,
+) -> None:
     """Fala o texto pelos alto-falantes (best-effort)."""
     backend = (backend or settings.TTS_BACKEND).lower()
     if backend == "pyttsx3":
@@ -142,7 +167,7 @@ def speak(text: str, *, backend: str | None = None) -> None:
         return
 
     tmp = Path(tempfile.gettempdir()) / "jade_tts.mp3"
-    synthesize(text, tmp, backend="edge")
+    synthesize(text, tmp, backend="edge", rate=rate, pitch=pitch)
     _play(tmp)
 
 

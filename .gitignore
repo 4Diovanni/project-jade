@@ -43,6 +43,10 @@ database/*.sqlite3
 database/index_state.json
 database/spotify_token.json
 
+# Modelo custom do wake-word (artefato pessoal, treinado à parte — ver
+# docs/wakeword_treino.md). Nunca deve ir pro git.
+database/*.onnx
+
 # Python
 __pycache__/
 *.py[cod]
