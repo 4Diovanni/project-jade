@@ -165,6 +165,17 @@ sem `Closes #<n>`.**
      genérica cobrindo várias entregas independentes.
    - Se o usuário pedir algo direto no chat, **abra a Issue mesmo assim** — ela é
      o registro rastreável do pedido.
+   - **Prioridade obrigatória.** Toda Issue nova recebe, na criação, uma label
+     de prioridade e é adicionada ao Project
+     [Project Jade — Backlog](https://github.com/users/4Diovanni/projects/3)
+     (campo "Prioridade" espelha a label):
+     - `P0-critico` — bug ativo ou bloqueio que afeta o uso diário; ataca primeiro.
+     - `P1-alta` — próximo da visão do projeto (`projeto_jade_arquitetura.md` §8)
+       ou melhora experiência central de uso.
+     - `P2-media` — importante, mas não bloqueia nada nem quebra experiência atual.
+     - `P3-baixa` — polimento; vale fazer, sem urgência.
+     `gh issue list --label P0-critico` (trocando a label) dá a fila de trabalho
+     sem precisar abrir o board.
 2. **Branch a partir da `main` atualizada**, nomeada pela Issue: `fix/<slug>`,
    `feat/<slug>`, `docs/<slug>`. Nunca commitar direto na `main` (branch
    protection ativa).
