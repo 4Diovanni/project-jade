@@ -94,6 +94,71 @@ def test_search_by_name_nao_encontrado():
     assert db.search_by_name("musica que nao existe em lugar nenhum") is None
 
 
+def test_search_similar_corrige_nome_com_typo():
+    db.upsert_tracks(
+        [
+            {
+                "id": "6",
+                "name": "Bohemian Rhapsody",
+                "artists": "Queen",
+                "url": "u6",
+                "playlist_id": None,
+                "playlist_name": None,
+            }
+        ]
+    )
+    resultado = db.search_similar("bohemian rapsody")  # typo em "rhapsody"
+    assert resultado
+    assert resultado[0]["id"] == "6"
+    assert 0.6 <= resultado[0]["score"] <= 1.0
+
+
+def test_search_similar_lista_varios_candidatos_proximos_ordenados():
+    db.upsert_tracks(
+        [
+            {
+                "id": "7",
+                "name": "13 Bala",
+                "artists": "Nebrugg",
+                "url": "u7",
+                "playlist_id": None,
+                "playlist_name": None,
+            },
+            {
+                "id": "8",
+                "name": "6Balas",
+                "artists": "kamaitachi",
+                "url": "u8",
+                "playlist_id": None,
+                "playlist_name": None,
+            },
+        ]
+    )
+    resultado = db.search_similar("bala", limit=3)
+    ids = [t["id"] for t in resultado]
+    assert "7" in ids
+    # ordenado por score decrescente
+    assert all(
+        resultado[i]["score"] >= resultado[i + 1]["score"] for i in range(len(resultado) - 1)
+    )
+
+
+def test_search_similar_nada_parecido_devolve_vazio():
+    db.upsert_tracks(
+        [
+            {
+                "id": "9",
+                "name": "Bohemian Rhapsody",
+                "artists": "Queen",
+                "url": "u9",
+                "playlist_id": None,
+                "playlist_name": None,
+            }
+        ]
+    )
+    assert db.search_similar("um nome completamente diferente de qualquer coisa") == []
+
+
 def test_last_synced_at_antes_e_depois_do_set():
     assert db.last_synced_at() is None
     db.set_last_synced_at("2026-08-08T12:00:00")

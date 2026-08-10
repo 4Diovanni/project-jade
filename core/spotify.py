@@ -22,6 +22,7 @@ from core.spotify_db import (
 )
 from core.spotify_db import (
     search_by_name,
+    search_similar,
     set_last_synced_at,
     upsert_tracks,
 )
@@ -236,6 +237,13 @@ def find_track(name: str) -> dict | None:
     """Busca só no cache local — nunca toca a API."""
     _ensure_synced()
     return search_by_name(name)
+
+
+def find_similar(name: str, limit: int = 3) -> list[dict]:
+    """Faixas parecidas com `name` no cache local, pra quando `find_track`
+    não acha exato — fallback de correção (ver tools/spotify_tool.py)."""
+    _ensure_synced()
+    return search_similar(name, limit=limit)
 
 
 def search_track(query: str) -> list[dict]:
