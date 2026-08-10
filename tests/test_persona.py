@@ -35,6 +35,14 @@ def test_mood_register_persiste_e_recupera(tmp_path, monkeypatch):
     assert (tmp_path / settings.MOOD_NOTE).exists()
 
 
+def test_persona_pede_tom_casual_e_evita_cliche_de_chatbot(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "OBSIDIAN_VAULT_PATH", tmp_path)
+    monkeypatch.setattr(settings, "NOTES_DIR", tmp_path)
+    p = persona.build_system_prompt(mood_level=0).lower()
+    assert "informal" in p
+    assert "clichês de chatbot" in p
+
+
 def test_persona_inclui_usuario_humor_e_perfil(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "OBSIDIAN_VAULT_PATH", tmp_path)
     monkeypatch.setattr(settings, "NOTES_DIR", tmp_path)  # onde as notas são escritas
