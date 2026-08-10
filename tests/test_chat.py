@@ -161,6 +161,32 @@ def test_send_com_contexto_do_rag_fica_local_mesmo_informativa(monkeypatch):
     assert sess.last_model == "local"
 
 
+# ── Guarda contra alucinação de ação (Issue #52) ──
+def test_send_sem_tool_casada_nunca_executa_tool_de_verdade(monkeypatch):
+    """Quando route() não acha tool (mensagem vazia, referência a contexto,
+    prefixo que quebra o parsing...), o turno vai pro LLM puro — a guarda
+    estrutural é que NENHUMA tool real (Spotify, sistema) é chamada nesse
+    ramo. A confiabilidade do texto em si é responsabilidade do system
+    prompt (ver test_persona.test_persona_proibe_fingir_execucao_de_acao)."""
+    chamou_tool = {"sim": False}
+
+    def _tool_nao_deveria_rodar(*a, **k):
+        chamou_tool["sim"] = True
+        raise AssertionError("tool real não deveria rodar quando route() devolve None")
+
+    monkeypatch.setattr(chat_mod, "route", lambda message: None)
+    monkeypatch.setattr(chat_mod, "cloud_available", lambda: False)
+    monkeypatch.setattr("tools.spotify_tool.SpotifyTool.run", _tool_nao_deveria_rodar)
+    monkeypatch.setattr("tools.system_tool.SystemControlTool.run", _tool_nao_deveria_rodar)
+    sess = _session(use_tools=True)
+
+    out = sess.send("")  # mensagem vazia, como no log do bug relatado
+
+    assert chamou_tool["sim"] is False
+    assert out == "resposta do modelo"
+    assert sess.last_model == "local"
+
+
 # ── Memória / histórico ──
 def test_send_registra_o_turno_no_historico(monkeypatch):
     monkeypatch.setattr(chat_mod, "route", lambda message: None)

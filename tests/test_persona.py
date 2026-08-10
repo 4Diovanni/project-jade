@@ -43,6 +43,16 @@ def test_persona_pede_tom_casual_e_evita_cliche_de_chatbot(tmp_path, monkeypatch
     assert "clichês de chatbot" in p
 
 
+def test_persona_proibe_fingir_execucao_de_acao(tmp_path, monkeypatch):
+    # Issue #52: sem tool binding no chat comum, o LLM não pode alegar que
+    # tocou música/abriu app/etc. quando nada foi executado de verdade.
+    monkeypatch.setattr(settings, "OBSIDIAN_VAULT_PATH", tmp_path)
+    monkeypatch.setattr(settings, "NOTES_DIR", tmp_path)
+    p = persona.build_system_prompt(mood_level=0).lower()
+    assert "não tem como executar ações reais" in p
+    assert "nunca diga que tocou" in p
+
+
 def test_persona_inclui_usuario_humor_e_perfil(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "OBSIDIAN_VAULT_PATH", tmp_path)
     monkeypatch.setattr(settings, "NOTES_DIR", tmp_path)  # onde as notas são escritas
