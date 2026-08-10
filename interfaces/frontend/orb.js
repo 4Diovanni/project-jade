@@ -11,7 +11,6 @@ export function createOrb(canvas) {
   let mediaSource = null;
   const bins = 64;
   let bytes = new Uint8Array(bins);
-  let wakewordCb = null;
   let t = 0;
 
   function ensureAudio() {
@@ -84,6 +83,5 @@ export function createOrb(canvas) {
       mediaSource.connect(analyser);
       mediaSource.connect(audioCtx.destination);
     },
-    onWakeword(fn) { wakewordCb = fn; }, // gancho para o #3 (não usado no #1)
   };
 }

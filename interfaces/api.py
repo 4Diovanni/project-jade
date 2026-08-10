@@ -46,6 +46,22 @@ def _get_session() -> ChatSession:
     return _session
 
 
+# Clientes conectados em /ws/chat — usado pra distribuir os turnos do
+# wake-word (ver _run_wakeword_listener) pra toda aba aberta, já que quem
+# inicia o turno não é nenhum desses clientes (é o microfone do servidor).
+_ws_clients: set[WebSocket] = set()
+
+
+async def _broadcast(payload: dict) -> None:
+    """Manda `payload` pra todo cliente de /ws/chat conectado (best-effort:
+    cliente que falhar é só removido, sem derrubar os outros)."""
+    for ws in list(_ws_clients):
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            _ws_clients.discard(ws)
+
+
 @app.on_event("startup")
 def _startup_spotify_sync() -> None:
     """Dispara um resync do cache do Spotify em segundo plano, se a conta já
@@ -55,6 +71,79 @@ def _startup_spotify_sync() -> None:
     from core.spotify import start_background_sync_if_stale
 
     start_background_sync_if_stale()
+
+
+async def _wakeword_handle_command(text: str) -> None:
+    """Processa um comando reconhecido pelo wake-word: mesma sessão/lock de
+    /chat e /voice/chat, e o turno é distribuído pros clientes de /ws/chat
+    conectados — a fala sai pelo <audio> do navegador, não pelos
+    alto-falantes do servidor (evita ouvir a resposta em dobro quando
+    servidor e navegador são a mesma máquina). Extraída à parte (em vez de
+    aninhada em _run_wakeword_listener) para poder ser testada sem thread,
+    loop nem microfone de verdade."""
+    from interfaces.voice_service import synthesize_reply
+
+    session = _get_session()
+    try:
+        async with _session_lock:
+            reply = await asyncio.to_thread(session.send, text)
+    except Exception as e:
+        logger.exception("Falha ao responder um comando do wake-word")
+        await _broadcast({"type": "wake_error", "detail": str(e)})
+        return
+    audio_path = synthesize_reply(reply)
+    await _broadcast(
+        {
+            "type": "wake_turn",
+            "transcription": text,
+            "reply": reply,
+            "audio_url": f"/voice/audio/{audio_path.name}",
+            "model": session.last_model,
+            "conversation_id": session.conversation_id,
+        }
+    )
+    task = session.title_task()
+    if task is not None:
+        asyncio.create_task(asyncio.to_thread(task))
+
+
+def _run_wakeword_listener(loop: asyncio.AbstractEventLoop) -> None:
+    """Roda numa thread própria (bloqueia no microfone) — ver
+    _wakeword_handle_command para o que acontece a cada comando reconhecido."""
+    from interfaces import wakeword_service
+
+    def _fire(event_type: str) -> None:
+        # Só sinaliza a UI (orb/status) — não espera a entrega, por isso sem
+        # .result(): não pode travar o loop do wake-word por causa disso.
+        asyncio.run_coroutine_threadsafe(_broadcast({"type": event_type}), loop)
+
+    def respond(text: str) -> None:
+        # Bloqueia a thread do wake-word até o turno terminar — ela só volta
+        # a ouvir o próximo "ok jade" depois, igual ao busy-lock do frontend.
+        asyncio.run_coroutine_threadsafe(_wakeword_handle_command(text), loop).result()
+
+    try:
+        wakeword_service.listen_forever(
+            respond=respond,
+            on_wake=lambda: _fire("wake_listening"),
+            on_thinking=lambda: _fire("wake_thinking"),
+        )
+    except wakeword_service.WakewordError as e:
+        logger.warning("Wake-word desligado: %s", e)
+    except Exception:
+        logger.exception("Wake-word encerrou com um erro inesperado")
+
+
+@app.on_event("startup")
+async def _startup_wakeword() -> None:
+    """Se `JADE_WAKEWORD_ENABLED=true`, sobe a escuta contínua por "ok jade"
+    como thread de fundo, integrada ao frontend (ver `_run_wakeword_listener`
+    e `docs/wakeword_treino.md`). Desligado por padrão — nada muda pra quem
+    não configurou o modelo custom."""
+    if not settings.WAKEWORD_ENABLED:
+        return
+    loop = asyncio.get_running_loop()
+    threading.Thread(target=_run_wakeword_listener, args=(loop,), daemon=True).start()
 
 
 # WebSocket handshakes não passam pela same-origin policy do browser — o
@@ -119,6 +208,7 @@ async def ws_chat(websocket: WebSocket) -> None:
         await websocket.close(code=1008)
         return
     await websocket.accept()
+    _ws_clients.add(websocket)
     session = _get_session()
     try:
         while True:
@@ -140,6 +230,8 @@ async def ws_chat(websocket: WebSocket) -> None:
                     asyncio.create_task(asyncio.to_thread(task))
     except WebSocketDisconnect:
         pass
+    finally:
+        _ws_clients.discard(websocket)
 
 
 class ChatRequest(BaseModel):

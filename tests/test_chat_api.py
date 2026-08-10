@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
+from pathlib import Path
 
 import httpx
 import pytest
@@ -208,3 +209,120 @@ def test_stream_to_ws_drena_fila_ate_o_fim_mesmo_com_falha_no_envio():
     # `session` em segundo plano (a corrida que este teste existe pra evitar).
     assert produtor_terminou.is_set()
     assert ok is False
+
+
+# ── Integração do wake-word com o frontend (broadcast em /ws/chat) ──
+def test_ws_chat_registra_e_remove_cliente_de_ws_clients():
+    """_ws_clients é a lista que _broadcast usa pra empurrar os turnos do
+    wake-word pra toda aba aberta — precisa ganhar o cliente ao conectar e
+    perdê-lo ao desconectar, senão vaza memória ou envia pra socket morto."""
+    client = TestClient(api_mod.app)
+
+    assert len(api_mod._ws_clients) == 0
+    with client.websocket_connect("/ws/chat"):
+        assert len(api_mod._ws_clients) == 1
+    assert len(api_mod._ws_clients) == 0
+
+
+def test_broadcast_manda_para_todo_cliente_conectado():
+    class FakeWebSocket:
+        def __init__(self, falha=False):
+            self.falha = falha
+            self.recebidos = []
+
+        async def send_json(self, payload):
+            if self.falha:
+                raise RuntimeError("cliente desconectou")
+            self.recebidos.append(payload)
+
+    ok = FakeWebSocket()
+    quebrado = FakeWebSocket(falha=True)
+    api_mod._ws_clients.add(ok)
+    api_mod._ws_clients.add(quebrado)
+    try:
+        asyncio.run(api_mod._broadcast({"type": "wake_listening"}))
+    finally:
+        api_mod._ws_clients.discard(ok)
+        api_mod._ws_clients.discard(quebrado)
+
+    assert ok.recebidos == [{"type": "wake_listening"}]
+
+
+def test_wakeword_handle_command_emite_wake_turn_com_a_resposta(monkeypatch):
+    recebidos = []
+
+    class FakeWebSocket:
+        async def send_json(self, payload):
+            recebidos.append(payload)
+
+    monkeypatch.setattr("interfaces.voice_service.synthesize_reply", lambda text: Path("x.mp3"))
+    ws = FakeWebSocket()
+    api_mod._ws_clients.add(ws)
+    try:
+        # Mensagem neutra de propósito: algo como "toca X" seria capturado
+        # pelo roteamento determinístico de tools (spotify_tool) antes de
+        # chegar no FakeLLM mockado pela fixture, e o teste é sobre o
+        # encaminhamento do wake-word, não sobre roteamento de tool.
+        asyncio.run(api_mod._wakeword_handle_command("oi, tudo bem?"))
+    finally:
+        api_mod._ws_clients.discard(ws)
+
+    assert len(recebidos) == 1
+    evento = recebidos[0]
+    assert evento["type"] == "wake_turn"
+    assert evento["transcription"] == "oi, tudo bem?"
+    assert evento["reply"] == "resposta da api"
+    assert evento["audio_url"] == "/voice/audio/x.mp3"
+    assert evento["model"] == "local"
+
+
+def test_wakeword_handle_command_emite_wake_error_quando_send_falha(monkeypatch):
+    recebidos = []
+
+    class FakeWebSocket:
+        async def send_json(self, payload):
+            recebidos.append(payload)
+
+    def _explode(self, message):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(chat_mod.ChatSession, "send", _explode)
+    ws = FakeWebSocket()
+    api_mod._ws_clients.add(ws)
+    try:
+        asyncio.run(api_mod._wakeword_handle_command("toca sweet dreams"))
+    finally:
+        api_mod._ws_clients.discard(ws)
+
+    assert recebidos == [{"type": "wake_error", "detail": "boom"}]
+
+
+def test_startup_wakeword_nao_sobe_thread_quando_desligado(monkeypatch):
+    monkeypatch.setattr(settings, "WAKEWORD_ENABLED", False)
+    threads_antes = threading.active_count()
+
+    asyncio.run(api_mod._startup_wakeword())
+
+    assert threading.active_count() == threads_antes
+
+
+def test_startup_wakeword_sobe_thread_daemon_quando_ligado(monkeypatch):
+    monkeypatch.setattr(settings, "WAKEWORD_ENABLED", True)
+    threads_criadas = []
+    thread_original = threading.Thread
+
+    def _thread_fake(*args, **kwargs):
+        t = thread_original(*args, **kwargs)
+        threads_criadas.append(t)
+        return t
+
+    # Substitui o alvo por um no-op: o teste garante que a thread é
+    # agendada certinha (daemon, com o loop atual), não que o listener de
+    # verdade (que abriria microfone) rode até o fim.
+    monkeypatch.setattr(threading, "Thread", _thread_fake)
+    monkeypatch.setattr(api_mod, "_run_wakeword_listener", lambda loop: None)
+
+    asyncio.run(api_mod._startup_wakeword())
+
+    assert len(threads_criadas) == 1
+    assert threads_criadas[0].daemon is True

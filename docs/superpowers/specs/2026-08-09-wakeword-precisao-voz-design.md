@@ -43,9 +43,6 @@ Dois problemas relatados pelo usuário:
 - **Focar/ativar a janela do navegador.** O spec original de 07-24 citava isso;
   não foi pedido agora e exige automação Win32 (janela em foco) que é frágil e
   não crítica — a Jade responde **falando**, sem precisar da janela em foco.
-- **Integração visual com o orb do frontend** (empurrar `listening`/`speaking`
-  via WebSocket para a UI reagir ao wake-word). Fica pra uma próxima iteração;
-  o daemon funciona como um "alto-falante inteligente" independente da UI.
 - **Rodar como serviço do Windows / autostart no boot.** O usuário roda
   `python main.py listen` manualmente por enquanto.
 - **Barge-in** (interromper a Jade no meio da fala dizendo "ok jade" de novo).
@@ -105,13 +102,51 @@ sounddevice (mic, 16kHz mono int16, frames de 1280 amostras/80ms)
   externo) — dois tons curtos (subida = ativado, descida = desativado),
   gerados uma vez e cacheados; tocados pelo mecanismo `_play` que já existe em
   `voice_service.py`.
-- **Sessão:** o daemon cria sua **própria** `ChatSession`, igual ao
-  `python main.py chat` — não compartilha estado com uma sessão da API aberta
-  no navegador (mesma assimetria que já existe hoje entre CLI e API). O
-  journal (`core/journal.py`) grava a conversa no vault de qualquer forma —
-  nada de memória se perde.
+- **Sessão:** `listen_forever()` aceita dois modos — standalone
+  (`python main.py listen`, passa `session`, cria sua **própria**
+  `ChatSession`, sem compartilhar estado com uma sessão da API aberta no
+  navegador) ou integrado à API (passa `respond` no lugar de `session`, ver
+  "Integração com o frontend" abaixo). O journal (`core/journal.py`) grava a
+  conversa no vault de qualquer forma — nada de memória se perde.
 - **Desligado por padrão:** `JADE_WAKEWORD_ENABLED=false` até o usuário ter o
   modelo custom.
+
+### Integração com o frontend (`interfaces/api.py`, `interfaces/frontend/`)
+
+Implementada nesta mesma entrega (não ficou para depois, como o rascunho
+original previa) — o motivo foi o próprio uso real: com `JADE_WAKEWORD_ENABLED=true`
+e o servidor da API rodando (`uvicorn`/`python main.py serve`), dizer "ok jade"
+não tinha efeito nenhum na aba aberta no navegador, porque `python main.py listen`
+é um processo à parte, com sessão própria — a UI não sabia que algo tinha
+acontecido.
+
+- **Startup hook:** `@app.on_event("startup") def _startup_wakeword()` sobe
+  `_run_wakeword_listener` numa `threading.Thread(daemon=True)` só se
+  `settings.WAKEWORD_ENABLED` — nada muda pra quem não configurou o modelo.
+- **Mesma sessão/lock da API:** ao reconhecer um comando,
+  `_wakeword_handle_command(text)` usa a **mesma** `_get_session()`/`_session_lock`
+  de `/chat`, `/voice/chat` e `/ws/chat` — um turno do wake-word serializa com
+  qualquer chamada concorrente pela UI, do mesmo jeito que push-to-talk já fazia.
+- **Distribuição via `/ws/chat`:** como o turno é iniciado pelo microfone do
+  servidor (não por nenhum cliente conectado), a resposta precisa ser
+  **empurrada**, não devolvida a quem pediu. `_ws_clients` (um `set[WebSocket]`
+  registrado/removido em `ws_chat()`) + `_broadcast(payload)` mandam o evento
+  pra toda aba aberta, reaproveitando o WebSocket persistente que `chat.js` já
+  mantém pro chat de texto (sem canal novo). Eventos: `wake_listening` (ativou,
+  orb some pra "listening"), `wake_thinking` (parou de ouvir, orb "thinking"),
+  `wake_turn` (`transcription`, `reply`, `audio_url`, `model`,
+  `conversation_id` — a UI mostra as bolhas e toca o áudio), `wake_error`
+  (falha no meio do turno).
+- **Áudio sai no navegador, não no servidor:** a resposta é sintetizada
+  (`synthesize_reply`) e servida via `/voice/audio/{name}` — o `<audio>` da
+  página toca, os alto-falantes do servidor ficam mudos. Evita ouvir a
+  resposta em dobro quando servidor e navegador são a mesma máquina (caso
+  comum de uso local).
+- **Testável sem microfone/thread:** a lógica de cada turno vive numa função
+  `async` de módulo (`_wakeword_handle_command`), não aninhada dentro de
+  `_run_wakeword_listener` — os testes chamam ela direto com
+  `asyncio.run(...)` e um `WebSocket` fake, sem precisar subir a thread nem o
+  modelo openWakeWord de verdade (`tests/test_chat_api.py`).
 
 ### `main.py`
 
@@ -187,8 +222,12 @@ Testes que dependem de microfone/modelo real de verdade ficam fora do CI
 - **Alterados:** `interfaces/voice_service.py` (`transcribe`: vad_filter,
   beam_size, initial_prompt); `core/config.py` + `.env.example` (settings
   novas + `WHISPER_MODEL` default); `main.py` (comando `listen`); `CLAUDE.md`
-  (Estado atual); `docs/superpowers/specs/2026-07-24-frontend-jade-shell-voz-design.md`
-  (marcar #3 como implementado, com a ressalva do foco de janela fora de escopo).
+  (Estado atual); `interfaces/api.py` (`_broadcast`, `_wakeword_handle_command`,
+  `_run_wakeword_listener`, `_startup_wakeword`); `interfaces/frontend/api.js`
+  e `chat.js` (eventos `wake_listening`/`wake_thinking`/`wake_turn`/`wake_error`
+  no orb e nas bolhas de chat); `docs/superpowers/specs/2026-07-24-frontend-jade-shell-voz-design.md`
+  (marcar #3 como implementado, incluindo a integração com o orb; só o foco de
+  janela segue fora de escopo).
 
 ## Decisões resolvidas
 
@@ -201,5 +240,7 @@ Testes que dependem de microfone/modelo real de verdade ficam fora do CI
 - Melhoria de acurácia do STT (`small` + VAD + beam_size + initial_prompt)
   entra **já nesta entrega**, beneficiando o push-to-talk mesmo sem o
   wake-word habilitado.
-- Foco de janela e integração com o orb do frontend ficam fora de escopo por
-  agora.
+- Foco de janela segue fora de escopo por agora. Integração com o orb do
+  frontend **entrou nesta mesma entrega** (ver "Integração com o frontend"
+  acima) — o daemon standalone sem UI não resolvia o caso de uso real de
+  quem já deixa o navegador aberto.

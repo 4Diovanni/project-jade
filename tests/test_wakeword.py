@@ -98,6 +98,14 @@ def test_load_model_recusa_quando_desligado(monkeypatch):
         ww._load_model()
 
 
+# ── listen_forever: modo standalone (session) x integrado (respond) ──
+def test_listen_forever_exige_session_ou_respond():
+    # Validado ANTES de qualquer import pesado (sounddevice/openwakeword) ou
+    # de _load_model() — por isso funciona sem as deps opcionais instaladas.
+    with pytest.raises(ValueError, match="session.*respond"):
+        ww.listen_forever()
+
+
 def test_load_model_recusa_sem_arquivo_do_modelo(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "WAKEWORD_ENABLED", True)
     monkeypatch.setattr(settings, "WAKEWORD_MODEL_PATH", str(tmp_path / "nao_existe.onnx"))

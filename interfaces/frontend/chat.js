@@ -90,6 +90,36 @@ export function createChat({ store, orb, audioEl, onConversation }) {
         orb.setState("idle");
       }
     },
+    // wake_* vêm do "ok jade" (python main.py listen, integrado à API) —
+    // o servidor empurra sozinho, não é resposta de nada que o composer
+    // tenha enviado. Mesmo fluxo do push-to-talk (voice.js), só que o
+    // gatilho foi o microfone do servidor em vez do botão do mic.
+    onWakeListening: () => {
+      if (!store.get().busy) store.set({ busy: true });
+      orb.setState("listening");
+    },
+    onWakeThinking: () => orb.setState("thinking"),
+    onWakeTurn: ({ transcription, reply, model, audio_url, conversation_id }) => {
+      addBubble("user", transcription);
+      addBubble("jade", reply, model);
+      notifyConversation(conversation_id);
+      store.set({ busy: false });
+      if (!store.get().muted && audio_url) {
+        audioEl.src = audio_url;
+        orb.connectAudio(audioEl);
+        orb.setState("speaking");
+        audioEl.onended = () => orb.setState("idle");
+        audioEl.play().catch(() => orb.setState("idle"));
+      } else {
+        orb.setState("idle");
+      }
+    },
+    onWakeError: (detail) => {
+      console.error("wake-word:", detail);
+      addBubble("error", "Não consegui processar o comando de voz.");
+      store.set({ busy: false });
+      orb.setState("idle");
+    },
   });
 
   function send(text) {

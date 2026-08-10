@@ -9,19 +9,42 @@ async function jsonPost(path, body) {
   return res.json();
 }
 
-export function _handleChatEvent(data, { onToken, onDone, onError } = {}) {
+export function _handleChatEvent(
+  data,
+  { onToken, onDone, onError, onWakeListening, onWakeThinking, onWakeTurn, onWakeError } = {},
+) {
   if (data.type === "token") onToken?.(data.text);
   else if (data.type === "done") onDone?.(data);
   else if (data.type === "error") onError?.(data.detail);
+  // wake_* não são resposta de nenhum send() nosso — o servidor empurra
+  // sozinho quando o "ok jade" (python main.py listen, integrado à API)
+  // reconhece um comando. Ver interfaces/api.py:_run_wakeword_listener.
+  else if (data.type === "wake_listening") onWakeListening?.();
+  else if (data.type === "wake_thinking") onWakeThinking?.();
+  else if (data.type === "wake_turn") onWakeTurn?.(data);
+  else if (data.type === "wake_error") onWakeError?.(data.detail);
 }
 
-export function connectChat({ onToken, onDone, onError, onClose } = {}, WebSocketImpl = typeof WebSocket !== "undefined" ? WebSocket : null, url = null) {
+export function connectChat(
+  { onToken, onDone, onError, onClose, onWakeListening, onWakeThinking, onWakeTurn, onWakeError } = {},
+  WebSocketImpl = typeof WebSocket !== "undefined" ? WebSocket : null,
+  url = null,
+) {
   if (!url && typeof location !== "undefined") {
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     url = `${scheme}://${location.host}/ws/chat`;
   }
   const ws = new WebSocketImpl(url);
-  ws.onmessage = (ev) => _handleChatEvent(JSON.parse(ev.data), { onToken, onDone, onError });
+  ws.onmessage = (ev) =>
+    _handleChatEvent(JSON.parse(ev.data), {
+      onToken,
+      onDone,
+      onError,
+      onWakeListening,
+      onWakeThinking,
+      onWakeTurn,
+      onWakeError,
+    });
   ws.onclose = () => onClose?.();
   return {
     send: (message) => ws.send(JSON.stringify({ message })),
