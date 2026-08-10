@@ -21,6 +21,13 @@ edge-tts>=6.1                # TTS online (vozes pt-BR de alta qualidade)
 python-multipart>=0.0.9      # upload de áudio na API
 # pyttsx3>=2.90              # TTS 100% offline (opcional)
 
+# ── Fase 3+: Wake-word "Ok Jade" (python main.py listen) ─────
+openwakeword>=0.6            # detecção local do wake-word (modelo custom, ver docs/wakeword_treino.md)
+sounddevice>=0.5              # captura/reprodução de áudio (mic + tons de ativação)
+# webrtcvad NÃO é usado: exige compilar uma extensão C e falha sem Visual C++
+# Build Tools no Windows. O endpointing usa limiar de energia (RMS) puro
+# numpy — ver interfaces/wakeword_service.py.
+
 # ── Fase 3+/4: Mãos (descomente ao chegar na fase) ───────────
 spotipy>=2.24                   # módulo Spotify (OAuth + Web API)
 # pyautogui                     # controle do SO

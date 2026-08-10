@@ -30,7 +30,7 @@ subsistemas independentes. Cada um terá seu próprio spec → plano → impleme
 |---|---|---|---|
 | **1** | **Shell do frontend + voz** | Layout JARVIS (chat + orb reativo), push-to-talk com TTS automático, lista de conversas em leitura. | **Este spec** |
 | 2 | Backend multi-thread | Criar/listar/abrir/**retomar** conversas com replay real dos turnos. | Futuro |
-| 3 | Daemon de wake-word | Serviço Python local ouvindo o mic; ao ouvir "Jade", foca/ativa a janela. | Futuro |
+| 3 | Daemon de wake-word | Serviço Python local ouvindo o mic; ao ouvir "Jade", foca/ativa a janela. | **Implementado** (`python main.py listen`, ver `docs/superpowers/specs/2026-08-09-wakeword-precisao-voz-design.md`) — sem o foco de janela e sem integração com o orb, que ficaram fora de escopo dessa entrega. |
 
 Ordem de construção: 1 → 2 → 3. O #1 coloca a experiência na tela cedo e
 de-risca voz + visualizador. O `orb.js` já nasce com um gancho de estado externo
