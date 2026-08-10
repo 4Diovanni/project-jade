@@ -1,0 +1,36 @@
+name: "🐞 Correção"
+description: "Algo está quebrado ou se comporta diferente do esperado."
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Contexto / Problema
+      description: O que acontece hoje, onde, e desde quando.
+    validations:
+      required: true
+  - type: textarea
+    id: reproducao
+    attributes:
+      label: Como reproduzir
+      placeholder: |
+        1. …
+        2. …
+        Esperado: …
+        Obtido: …
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: Proposta de correção
+      description: Hipótese da causa e caminho de solução, se já houver.
+  - type: textarea
+    id: aceite
+    attributes:
+      label: Critérios de aceite
+      value: |
+        - [ ]
+    validations:
+      required: true

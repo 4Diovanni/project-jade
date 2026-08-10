@@ -1,0 +1,33 @@
+name: "🚀 Nova função"
+description: "Uma capacidade que a Jade ainda não tem (nova tool, integração, endpoint…)."
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: Objetivo
+      description: O que a Jade passa a saber fazer, na voz do usuário.
+      placeholder: 'Ex.: "Jade, lê meus e-mails não lidos" devolve um resumo dos últimos 5.'
+    validations:
+      required: true
+  - type: textarea
+    id: desenho
+    attributes:
+      label: Desenho
+      description: |
+        Nova tool em `tools/` (contrato `JadeTool` + registro em `tools/registry.py`,
+        ver a skill add-jade-tool)? Rotas novas? Config nova no `.env.example` e em
+        `core/config.py`? Dependências extras?
+    validations:
+      required: true
+  - type: textarea
+    id: aceite
+    attributes:
+      label: Critérios de aceite
+      value: |
+        - [ ]
+        - [ ] Testes de fumaça em `tests/` (sem depender do LLM/Ollama)
+        - [ ] `CLAUDE.md` atualizado
+    validations:
+      required: true

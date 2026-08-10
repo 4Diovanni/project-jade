@@ -1,0 +1,27 @@
+name: "✨ Melhoria"
+description: "Algo que já funciona, mas pode ficar melhor (desempenho, UX, qualidade, refactor)."
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto
+      description: O que existe hoje e qual a limitação.
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: Proposta
+      description: A mudança pretendida e os arquivos/módulos afetados.
+    validations:
+      required: true
+  - type: textarea
+    id: aceite
+    attributes:
+      label: Critérios de aceite
+      value: |
+        - [ ]
+    validations:
+      required: true
