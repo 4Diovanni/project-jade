@@ -16,6 +16,28 @@ def test_config_voz_defaults():
     assert settings.WHISPER_LANGUAGE
 
 
+def test_transcribe_usa_vad_beam_e_prompt(monkeypatch):
+    """Regressão: erros como 'toque' em vez de 'toca' vinham de transcrever
+    sem VAD/beam search/viés de vocabulário. Trava os três parâmetros."""
+    captured: dict = {}
+
+    class _FakeSegment:
+        text = "toca sweet dreams"
+
+    class _FakeModel:
+        def transcribe(self, path, **kwargs):
+            captured.update(kwargs)
+            return [_FakeSegment()], None
+
+    monkeypatch.setattr(voice_service, "_get_whisper", lambda: _FakeModel())
+    text = voice_service.transcribe("audio.wav")
+
+    assert text == "toca sweet dreams"
+    assert captured["vad_filter"] is True
+    assert captured["beam_size"] == 5
+    assert captured["initial_prompt"] == settings.WHISPER_PROMPT
+
+
 def test_synthesize_backend_desconhecido(tmp_path):
     # Deve validar o backend ANTES de importar libs pesadas.
     with pytest.raises(ValueError):

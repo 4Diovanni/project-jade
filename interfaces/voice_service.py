@@ -39,10 +39,19 @@ def _get_whisper():
 
 
 def transcribe(audio_path: str | Path, language: str | None = None) -> str:
-    """Transcreve um arquivo de áudio para texto (pt por padrão)."""
+    """Transcreve um arquivo de áudio para texto (pt por padrão).
+
+    `vad_filter` remove silêncio/ruído das bordas do clipe (causa comum de
+    palavras cortadas tipo "toque" em vez de "toca"); `beam_size` troca
+    velocidade por uma busca melhor; `initial_prompt` dá viés de vocabulário
+    pro Whisper acertar nomes próprios (ex.: "Jade") sem contexto."""
     model = _get_whisper()
     segments, _info = model.transcribe(
-        str(audio_path), language=language or settings.WHISPER_LANGUAGE
+        str(audio_path),
+        language=language or settings.WHISPER_LANGUAGE,
+        vad_filter=True,
+        beam_size=5,
+        initial_prompt=settings.WHISPER_PROMPT or None,
     )
     return " ".join(seg.text.strip() for seg in segments).strip()
 

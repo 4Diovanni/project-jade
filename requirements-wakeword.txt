@@ -1,0 +1,17 @@
+# Wake-word "Ok Jade" (python main.py listen) — OPCIONAL.
+# Instale só se for usar o recurso: pip install -r requirements-wakeword.txt
+# (além de treinar o modelo custom — ver docs/wakeword_treino.md).
+#
+# Fica fora de requirements.txt/requirements-dev.txt de propósito: no Linux,
+# openwakeword declara uma dependência obrigatória de tflite-runtime (mesmo
+# usando só o backend ONNX), e não existe wheel de tflite-runtime para
+# Python 3.12+ — instalar isso no CI (roda em Linux) quebraria os testes e o
+# pip-audit em qualquer PR, mesmo sem tocar em voz. No Windows (onde este
+# projeto roda de fato) não tem esse problema: só o onnxruntime é puxado.
+-r requirements.txt
+
+openwakeword>=0.6            # detecção local do wake-word (modelo custom, ver docs/wakeword_treino.md)
+sounddevice>=0.5             # captura/reprodução de áudio (mic + tons de ativação)
+# webrtcvad NÃO é usado: exige compilar uma extensão C e falha sem Visual C++
+# Build Tools no Windows. O endpointing usa limiar de energia (RMS) puro
+# numpy — ver interfaces/wakeword_service.py.

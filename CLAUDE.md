@@ -82,10 +82,27 @@ Segredos só no `.env`. CI: `ci.yml` (lint+test), `security.yml` (bandit/pip-aud
   direto no chat.
 
 - Fase 3 (voz): `interfaces/voice_service.py` — STT local `faster-whisper`
-  (sem PyTorch) + TTS `edge-tts` (padrão) ou `pyttsx3` (offline). CLI
-  `python main.py say "..."` e `transcribe <audio>`; endpoints `/voice/transcribe`
-  `/voice/tts` `/voice/chat`. **WhatsApp adiado** (cliente não-oficial, risco de
-  ban; será serviço Node em `interfaces/whatsapp_bot/`).
+  (`WHISPER_MODEL=small` + `vad_filter`/`beam_size`/`initial_prompt` para
+  acurácia — calibrado depois de erros como "toque" no lugar de "toca") + TTS
+  `edge-tts` (padrão) ou `pyttsx3` (offline). CLI `python main.py say "..."` e
+  `transcribe <audio>`; endpoints `/voice/transcribe` `/voice/tts`
+  `/voice/chat`. **WhatsApp adiado** (cliente não-oficial, risco de ban; será
+  serviço Node em `interfaces/whatsapp_bot/`).
+- **Wake-word "Ok Jade"** (`interfaces/wakeword_service.py`,
+  `python main.py listen`): escuta contínua local via **openWakeWord**,
+  desligada por padrão (`JADE_WAKEWORD_ENABLED=false`) porque exige um modelo
+  custom treinado à parte — não existe "ok jade" pronto (openWakeWord só tem
+  modelos em inglês). Ver `docs/wakeword_treino.md` (passo a passo + aviso
+  sobre o gerador de dados sintéticos ser só em inglês) e
+  `docs/superpowers/specs/2026-08-09-wakeword-precisao-voz-design.md`.
+  Endpointing por energia (RMS) em vez de `webrtcvad`: a lib exige compilar
+  extensão C e falha sem Visual C++ Build Tools no Windows. Roda como
+  processo próprio, desacoplado da API (sessão de chat independente, como o
+  CLI). Foco de janela do navegador e integração com o orb do frontend ficam
+  fora de escopo por enquanto. **Dependências em `requirements-wakeword.txt`,
+  fora do `requirements.txt` padrão** — `openwakeword` puxa `tflite-runtime`
+  no Linux sem wheel pra Python 3.12+, quebraria o CI; instale com
+  `pip install -r requirements-wakeword.txt` só se for usar o recurso.
 
 - Fase 4 (As Mãos — em progresso): `core/agent_router.py` faz **roteamento
   determinístico** (cada tool declara `trigger_hints` e valida em `accepts()`;

@@ -94,14 +94,38 @@ class Settings:
 
     # ── Voz (Fase 3) ──
     # STT local (faster-whisper): tiny|base|small|medium|large-v3
-    WHISPER_MODEL: str = os.getenv("JADE_WHISPER_MODEL", "base")
+    # "small" troca um pouco de velocidade por acurácia bem maior que "base" —
+    # calibrado depois de erros como "toque" no lugar de "toca" e "ja de" no
+    # lugar de "Jade" (ver docs/superpowers/specs/2026-08-09-wakeword-precisao-voz-design.md).
+    WHISPER_MODEL: str = os.getenv("JADE_WHISPER_MODEL", "small")
     WHISPER_LANGUAGE: str = os.getenv("JADE_WHISPER_LANGUAGE", "pt")
+    # Viés de vocabulário do Whisper: nomes próprios/termos que ele tende a
+    # errar sem contexto (técnica oficial do initial_prompt).
+    WHISPER_PROMPT: str = os.getenv(
+        "JADE_WHISPER_PROMPT", "Jade, tocar, Spotify, playlist, música."
+    )
     # TTS: "edge" (online, alta qualidade) ou "pyttsx3" (100% offline)
     TTS_BACKEND: str = os.getenv("JADE_TTS_BACKEND", "edge")
     TTS_VOICE: str = os.getenv("JADE_TTS_VOICE", "pt-BR-FranciscaNeural")
     # Onde os áudios gerados pelo Jade são salvos (padrão: subpasta do vault,
     # visível no Obsidian). São .mp3 (backend edge) consumíveis por ele e por você.
     AUDIO_OUTPUT_DIR: Path = _resolve_path(os.getenv("JADE_AUDIO_DIR", ""), NOTES_DIR / "Áudios")
+
+    # ── Wake-word "Ok Jade" (python main.py listen) ──
+    # Desligado por padrão: exige um modelo openWakeWord custom treinado à
+    # parte (não existe "ok jade" pronto) — ver docs/wakeword_treino.md.
+    WAKEWORD_ENABLED: bool = os.getenv("JADE_WAKEWORD_ENABLED", "false").strip().lower() == "true"
+    WAKEWORD_MODEL_PATH: str = os.getenv("JADE_WAKEWORD_MODEL_PATH", "")
+    # Score mínimo (0-1) do openWakeWord para considerar "ok jade" detectado.
+    WAKEWORD_THRESHOLD: float = float(os.getenv("JADE_WAKEWORD_THRESHOLD", "0.5"))
+    # Silêncio contínuo (ms) após a ativação que marca o fim do comando.
+    WAKEWORD_SILENCE_MS: int = int(os.getenv("JADE_WAKEWORD_SILENCE_MS", "900"))
+    # Teto de duração (s) do comando gravado após a ativação — nunca escuta pra sempre.
+    WAKEWORD_MAX_SECONDS: int = int(os.getenv("JADE_WAKEWORD_MAX_SECONDS", "12"))
+    # Limiar de energia (RMS, escala int16) que marca um frame como "fala" no
+    # endpointing do comando. Suba se o microfone captar ruído de fundo como
+    # fala; desça se estiver cortando o final de frases baixinhas.
+    WAKEWORD_VAD_RMS_THRESHOLD: float = float(os.getenv("JADE_WAKEWORD_VAD_RMS_THRESHOLD", "500"))
 
     # ── Tools / Mãos (Fase 4) ──
     # Liga/desliga o controle do sistema operacional (abrir apps, volume...).

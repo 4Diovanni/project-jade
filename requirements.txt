@@ -21,6 +21,14 @@ edge-tts>=6.1                # TTS online (vozes pt-BR de alta qualidade)
 python-multipart>=0.0.9      # upload de áudio na API
 # pyttsx3>=2.90              # TTS 100% offline (opcional)
 
+# ── Fase 3+: Wake-word "Ok Jade" (python main.py listen) ─────
+# NÃO entra aqui de propósito: openwakeword exige tflite-runtime no Linux
+# (mesmo só usando o backend ONNX), e não existe wheel de tflite-runtime para
+# Python 3.12+ — quebraria o CI (roda em Linux) e o pip-audit. No Windows
+# instala sem esse problema (só onnxruntime é puxado). Opcional e só
+# necessário se for usar o wake-word: pip install -r requirements-wakeword.txt
+# (ver docs/wakeword_treino.md).
+
 # ── Fase 3+/4: Mãos (descomente ao chegar na fase) ───────────
 spotipy>=2.24                   # módulo Spotify (OAuth + Web API)
 # pyautogui                     # controle do SO

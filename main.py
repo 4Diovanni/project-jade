@@ -4,6 +4,7 @@ Uso:
     python main.py            # sobe a API FastAPI (uvicorn)
     python main.py chat       # chat via terminal (Fase 1)
     python main.py index      # (re)indexa o vault no RAG
+    python main.py listen     # escuta contínua por "ok jade" (Fase 3+)
     python main.py bench      # mede desempenho e qualidade (ver bench/)
 """
 
@@ -130,6 +131,32 @@ def run_transcribe() -> None:
     print(f"📝 {text}")
 
 
+def run_listen() -> None:
+    """Escuta contínua por 'ok jade' (python main.py listen)."""
+    from core.chat import ChatSession
+    from interfaces import wakeword_service
+
+    if not settings.WAKEWORD_ENABLED:
+        print(
+            "🔇 Wake-word desligado (JADE_WAKEWORD_ENABLED=false).\n"
+            "Gere o modelo custom (docs/wakeword_treino.md), aponte "
+            "JADE_WAKEWORD_MODEL_PATH e habilite JADE_WAKEWORD_ENABLED=true no .env."
+        )
+        return
+    try:
+        session = ChatSession()
+    except Exception as e:
+        print(f"❌ Não consegui iniciar o modelo.\n{_provider_hint(e)}")
+        return
+    try:
+        wakeword_service.listen_forever(session)
+    except wakeword_service.WakewordError as e:
+        print(f"❌ {e}")
+    except KeyboardInterrupt:
+        session.learn_from_conversation()
+        print("\nAté logo. 👋")
+
+
 def run_say() -> None:
     """TTS: fala um texto ou salva em arquivo (python main.py say "texto" [saida])."""
     from interfaces.voice_service import speak, synthesize
@@ -155,6 +182,8 @@ if __name__ == "__main__":
         run_cli()
     elif command == "index":
         run_index()
+    elif command == "listen":
+        run_listen()
     elif command == "transcribe":
         run_transcribe()
     elif command == "say":
