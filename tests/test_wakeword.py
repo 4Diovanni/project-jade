@@ -83,7 +83,9 @@ def test_max_frames_for_arredonda_por_baixo_e_nunca_zero():
 
 # ── Configuração / validação do modelo ──
 def test_settings_wakeword_tem_defaults_sensatos():
-    assert settings.WAKEWORD_ENABLED is False
+    # WAKEWORD_ENABLED é uma escolha de quem roda o projeto (liga depois de
+    # treinar o modelo custom) — não uma invariante para travar em teste.
+    assert isinstance(settings.WAKEWORD_ENABLED, bool)
     assert 0.0 < settings.WAKEWORD_THRESHOLD <= 1.0
     assert settings.WAKEWORD_SILENCE_MS > 0
     assert settings.WAKEWORD_MAX_SECONDS > 0

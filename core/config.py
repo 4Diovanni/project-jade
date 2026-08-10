@@ -106,7 +106,13 @@ class Settings:
     )
     # TTS: "edge" (online, alta qualidade) ou "pyttsx3" (100% offline)
     TTS_BACKEND: str = os.getenv("JADE_TTS_BACKEND", "edge")
-    TTS_VOICE: str = os.getenv("JADE_TTS_VOICE", "pt-BR-FranciscaNeural")
+    TTS_VOICE: str = os.getenv("JADE_TTS_VOICE", "pt-BR-ThalitaMultilingualNeural")
+    # Prosódia do backend "edge" (formato do próprio edge-tts): rate em %
+    # relativo à velocidade natural da voz ("+0%", "-10%", "+15%") e pitch em
+    # Hz relativo ao tom natural ("+0Hz", "-20Hz"). Ajuda a tirar o tom "robô"
+    # de vozes muito neutras/planas.
+    TTS_RATE: str = os.getenv("JADE_TTS_RATE", "+0%")
+    TTS_PITCH: str = os.getenv("JADE_TTS_PITCH", "+0Hz")
     # Onde os áudios gerados pelo Jade são salvos (padrão: subpasta do vault,
     # visível no Obsidian). São .mp3 (backend edge) consumíveis por ele e por você.
     AUDIO_OUTPUT_DIR: Path = _resolve_path(os.getenv("JADE_AUDIO_DIR", ""), NOTES_DIR / "Áudios")
@@ -114,12 +120,12 @@ class Settings:
     # ── Wake-word "Ok Jade" (python main.py listen) ──
     # Desligado por padrão: exige um modelo openWakeWord custom treinado à
     # parte (não existe "ok jade" pronto) — ver docs/wakeword_treino.md.
-    WAKEWORD_ENABLED: bool = os.getenv("JADE_WAKEWORD_ENABLED", "false").strip().lower() == "true"
+    WAKEWORD_ENABLED: bool = os.getenv("JADE_WAKEWORD_ENABLED", "true").strip().lower() == "true"
     WAKEWORD_MODEL_PATH: str = os.getenv("JADE_WAKEWORD_MODEL_PATH", "")
     # Score mínimo (0-1) do openWakeWord para considerar "ok jade" detectado.
-    WAKEWORD_THRESHOLD: float = float(os.getenv("JADE_WAKEWORD_THRESHOLD", "0.5"))
+    WAKEWORD_THRESHOLD: float = float(os.getenv("JADE_WAKEWORD_THRESHOLD", "0.15"))
     # Silêncio contínuo (ms) após a ativação que marca o fim do comando.
-    WAKEWORD_SILENCE_MS: int = int(os.getenv("JADE_WAKEWORD_SILENCE_MS", "900"))
+    WAKEWORD_SILENCE_MS: int = int(os.getenv("JADE_WAKEWORD_SILENCE_MS", "1200"))
     # Teto de duração (s) do comando gravado após a ativação — nunca escuta pra sempre.
     WAKEWORD_MAX_SECONDS: int = int(os.getenv("JADE_WAKEWORD_MAX_SECONDS", "12"))
     # Limiar de energia (RMS, escala int16) que marca um frame como "fala" no

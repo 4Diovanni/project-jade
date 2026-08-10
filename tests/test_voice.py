@@ -69,8 +69,9 @@ def test_synthesize_edge_dentro_de_event_loop(monkeypatch, tmp_path):
     saved: dict = {}
 
     class _FakeCommunicate:
-        def __init__(self, text, voice):
+        def __init__(self, text, voice, **kwargs):
             saved["text"] = text
+            saved.update(kwargs)
 
         async def save(self, path):
             Path(path).write_bytes(b"fake-mp3")
@@ -83,10 +84,38 @@ def test_synthesize_edge_dentro_de_event_loop(monkeypatch, tmp_path):
 
     async def _dentro_do_loop():
         # Simula o /voice/chat: chamada síncrona de dentro de um loop rodando.
-        voice_service._synthesize_edge("olá", out, "pt-BR-FranciscaNeural")
+        voice_service._synthesize_edge(
+            "olá", out, "pt-BR-FranciscaNeural", rate="+0%", pitch="+0Hz"
+        )
 
     asyncio.run(_dentro_do_loop())
 
     assert out.exists()
     assert saved.get("text") == "olá"
     assert saved.get("path") == str(out)
+
+
+def test_synthesize_edge_repassa_rate_e_pitch(monkeypatch, tmp_path):
+    """rate/pitch (prosódia) precisam chegar até o edge_tts.Communicate."""
+    import sys
+    import types
+    from pathlib import Path
+
+    saved: dict = {}
+
+    class _FakeCommunicate:
+        def __init__(self, text, voice, **kwargs):
+            saved.update(kwargs)
+
+        async def save(self, path):
+            Path(path).write_bytes(b"fake-mp3")
+
+    monkeypatch.setitem(
+        sys.modules, "edge_tts", types.SimpleNamespace(Communicate=_FakeCommunicate)
+    )
+    voice_service._synthesize_edge(
+        "olá", tmp_path / "fala.mp3", "pt-BR-FranciscaNeural", rate="+15%", pitch="-20Hz"
+    )
+
+    assert saved["rate"] == "+15%"
+    assert saved["pitch"] == "-20Hz"
