@@ -10,7 +10,7 @@ langchain-anthropic>=0.1     # provider "nuvem" do roteador dual-model (Claude)
 
 # ── Fase 2: Memória / RAG do Obsidian ────────────────────────
 chromadb>=0.5
-langchain-text-splitters>=0.2   # chunking das notas
+langchain-text-splitters>=1.1.2   # chunking das notas
 # Embeddings via Ollama (OllamaEmbeddings já vem em langchain-ollama, acima).
 # Alternativa local com PyTorch (não usada por padrão):
 # sentence-transformers>=2.7
