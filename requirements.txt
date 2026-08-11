@@ -1,6 +1,6 @@
 # ── Fase 1: Core / API / LLM (deps atuais) ───────────────────
 fastapi>=0.110
-uvicorn[standard]>=0.29
+uvicorn[standard]>=0.52.1
 python-dotenv>=1.0
 pydantic>=2.6
 langchain-core>=0.2
