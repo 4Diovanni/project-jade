@@ -120,7 +120,12 @@ def _merge_adjacent_chunks(entries: list[tuple[str, dict]]) -> list[str]:
     blocks: list[tuple[int, str, str]] = []  # (melhor posição de relevância, fonte, texto)
 
     for source, items in groups.items():
-        com_indice = sorted((it for it in items if it[2] is not None), key=lambda it: it[2])
+        # O filtro `it[2] is not None` já garante int no genexpr, mas o pyright
+        # não propaga essa narrow pro parâmetro do lambda em sorted().
+        com_indice = sorted(
+            (it for it in items if it[2] is not None),
+            key=lambda it: it[2],  # pyright: ignore[reportCallIssue, reportArgumentType]
+        )
         sem_indice = [it for it in items if it[2] is None]
 
         run: list[tuple[int, str, int]] = []
@@ -215,11 +220,13 @@ def reindex_vault() -> int:
     batch = 128  # add em lotes para não estourar a requisição
     for start in range(0, len(docs), batch):
         end = start + batch
+        # Chroma aceita list[list[float]]/list[dict] puros em runtime; os stubs
+        # são invariantes (list) e mais estritos que o comportamento real.
         collection.add(
             ids=ids[start:end],
             documents=docs[start:end],
-            embeddings=embeddings[start:end],
-            metadatas=metas[start:end],
+            embeddings=embeddings[start:end],  # pyright: ignore[reportArgumentType]
+            metadatas=metas[start:end],  # pyright: ignore[reportArgumentType]
         )
     _save_state(state)  # mantém o cache incremental consistente com o reindex
     return n_notes
@@ -256,7 +263,9 @@ def query_memory(question: str, k: int | None = None) -> list[str]:
         # observável no bench em vez de silenciosamente desativar o filtro.
         note(rag_distances_missing=True)
 
-    entries = _filter_by_distance(docs, metas, distances)
+    # `metas` vem tipado List[Metadata] (TypedDict) pelo stub do Chroma; em
+    # runtime é um dict comum, compatível com o list[dict] de _filter_by_distance.
+    entries = _filter_by_distance(docs, metas, distances)  # pyright: ignore[reportArgumentType]
     out = _merge_adjacent_chunks(entries)
     sources = list(dict.fromkeys((meta or {}).get("source", "?") for _doc, meta in entries))
     # As fontes vão para as métricas aqui, onde ainda são estruturadas — o bench
@@ -287,7 +296,7 @@ def index_note(path: str | Path) -> None:
     collection.add(
         ids=[f"{rel}::{i}" for i in range(len(chunks))],
         documents=chunks,
-        embeddings=embeddings,
+        embeddings=embeddings,  # pyright: ignore[reportArgumentType]
         metadatas=[{"source": rel, "chunk": i} for i in range(len(chunks))],
     )
 
@@ -304,7 +313,10 @@ def related_sources(text: str, k: int = 3, exclude: str | None = None) -> list[s
     for meta in metas:
         src = (meta or {}).get("source")
         if src and src != exclude and src not in out:
-            out.append(src)
+            # metadata["source"] é sempre str por convenção de quem grava
+            # (core/memory.py sempre escreve str(...)); o stub do Chroma
+            # permite outros tipos de valor de metadata em geral.
+            out.append(src)  # pyright: ignore[reportArgumentType]
         if len(out) >= k:
             break
     return out

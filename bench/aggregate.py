@@ -70,7 +70,9 @@ def evaluate(case: Case, turn: Turn, *, mood_before: int) -> tuple[str, list[Fai
             falhas.append(Failure("tool", f"esperava {expect['tool']!r}, veio {obtida!r}"))
 
     if "sources_include" in expect:
-        obtidas = set(turn.meta.get("sources") or [])
+        # meta é dict[str, object] de propósito (bag genérico de métricas) —
+        # "sources" é sempre list[str] por convenção de quem grava (core/memory.py).
+        obtidas = set(turn.meta.get("sources") or [])  # pyright: ignore[reportArgumentType]
         faltando = [s for s in expect["sources_include"] if s not in obtidas]
         if faltando:
             falhas.append(
@@ -81,14 +83,14 @@ def evaluate(case: Case, turn: Turn, *, mood_before: int) -> tuple[str, list[Fai
             )
 
     if "context" in expect:
-        chunks = int(turn.meta.get("chunks") or 0)
+        chunks = int(turn.meta.get("chunks") or 0)  # pyright: ignore[reportArgumentType]
         if expect["context"] == "none" and chunks > 0:
             falhas.append(Failure("context", f"esperava nenhum trecho, vieram {chunks}"))
         if expect["context"] == "any" and chunks == 0:
             falhas.append(Failure("context", "esperava algum trecho, não veio nenhum"))
 
     if "mood_delta" in expect:
-        depois = int(turn.meta.get("mood_level") or 0)
+        depois = int(turn.meta.get("mood_level") or 0)  # pyright: ignore[reportArgumentType]
         delta = depois - mood_before
         direcao = "positive" if delta > 0 else "negative" if delta < 0 else "neutral"
         if direcao != expect["mood_delta"]:
