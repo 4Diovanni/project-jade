@@ -6,6 +6,7 @@ Toda a aplicação deve importar `settings` daqui, nunca chamar os.getenv solto.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -25,6 +26,27 @@ def _resolve_path(value: str, default: Path) -> Path:
     if not path.is_absolute():
         path = BASE_DIR / path
     return path.resolve()
+
+
+def _default_desktop_dir() -> Path:
+    """Resolve a Área de Trabalho real do usuário no Windows.
+
+    Não usa `Path.home() / "Desktop"` direto porque a pasta pode estar
+    redirecionada (ex.: para dentro do OneDrive, como neste próprio ambiente)
+    — o valor correto vem do registro (User Shell Folders), que já resolve
+    esse redirecionamento e variáveis de ambiente no caminho."""
+    if sys.platform == "win32":
+        import contextlib
+        import winreg
+
+        with contextlib.suppress(OSError):
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+            )
+            raw, _ = winreg.QueryValueEx(key, "Desktop")
+            return Path(os.path.expandvars(raw))
+    return Path.home() / "Desktop"
 
 
 class Settings:
@@ -123,7 +145,7 @@ class Settings:
     WAKEWORD_ENABLED: bool = os.getenv("JADE_WAKEWORD_ENABLED", "true").strip().lower() == "true"
     WAKEWORD_MODEL_PATH: str = os.getenv("JADE_WAKEWORD_MODEL_PATH", "")
     # Score mínimo (0-1) do openWakeWord para considerar "ok jade" detectado.
-    WAKEWORD_THRESHOLD: float = float(os.getenv("JADE_WAKEWORD_THRESHOLD", "0.15"))
+    WAKEWORD_THRESHOLD: float = float(os.getenv("JADE_WAKEWORD_THRESHOLD", "0.01"))
     # Silêncio contínuo (ms) após a ativação que marca o fim do comando.
     WAKEWORD_SILENCE_MS: int = int(os.getenv("JADE_WAKEWORD_SILENCE_MS", "1200"))
     # Teto de duração (s) do comando gravado após a ativação — nunca escuta pra sempre.
@@ -137,6 +159,16 @@ class Settings:
     # Liga/desliga o controle do sistema operacional (abrir apps, volume...).
     SYSTEM_TOOL_ENABLED: bool = (
         os.getenv("JADE_SYSTEM_TOOL_ENABLED", "true").strip().lower() != "false"
+    )
+    # Criação/escrita de arquivos por contexto (Issue #63).
+    FILES_TOOL_ENABLED: bool = (
+        os.getenv("JADE_FILES_TOOL_ENABLED", "true").strip().lower() != "false"
+    )
+    # Onde os arquivos criados pela Jade são salvos. Default = Área de
+    # Trabalho real do usuário (ver `_default_desktop_dir`); configurável
+    # para restringir a outra pasta.
+    FILES_TOOL_BASE_DIR: Path = _resolve_path(
+        os.getenv("JADE_FILES_BASE_DIR", ""), _default_desktop_dir()
     )
 
     # ── Roteador dual-model (Qwen3 local + Claude na nuvem) ──
