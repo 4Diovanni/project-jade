@@ -172,7 +172,7 @@ def listen_forever(
     session: ChatSession | None = None,
     *,
     speak: Callable[[str], None] | None = None,
-    respond: Callable[[str], None] | None = None,
+    respond: Callable[[str], None] | None = None,  # pyright: ignore[reportRedeclaration]
     on_wake: Callable[[], None] | None = None,
     on_thinking: Callable[[], None] | None = None,
 ) -> None:
@@ -211,7 +211,10 @@ def listen_forever(
         while True:
             frame, _overflowed = stream.read(FRAME_SAMPLES)
             prediction = model.predict(frame.reshape(-1).astype(np.int16))
-            score = max(prediction.values(), default=0.0)
+            # predict() só devolve tupla (dict, dict) quando chamado com
+            # timing=True (não é o caso aqui) — o stub inferido do openWakeWord
+            # não expressa essa distinção por overload.
+            score = max(prediction.values(), default=0.0)  # pyright: ignore[reportAttributeAccessIssue]
             if score < settings.WAKEWORD_THRESHOLD:
                 continue
 

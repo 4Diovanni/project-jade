@@ -48,7 +48,7 @@ def get_llm(provider: str | None = None, *, temperature: float | None = None):
         if not settings.OPENAI_API_KEY:
             raise RuntimeError("Defina OPENAI_API_KEY no .env para usar o provider openai.")
         try:
-            from langchain_openai import ChatOpenAI
+            from langchain_openai import ChatOpenAI  # pyright: ignore[reportMissingImports]
         except ImportError as e:  # pragma: no cover
             raise RuntimeError("Rode: pip install langchain-openai") from e
         return ChatOpenAI(
@@ -65,10 +65,13 @@ def get_llm(provider: str | None = None, *, temperature: float | None = None):
         except ImportError as e:  # pragma: no cover
             raise RuntimeError("Rode: pip install langchain-anthropic") from e
         # NÃO passar temperature: modelos Opus 4.8 / Sonnet 5 rejeitam o parâmetro.
-        return ChatAnthropic(
-            model=settings.ANTHROPIC_MODEL,
+        # O __init__ real do ChatAnthropic é (*args, **kwargs) — pydantic monta a
+        # validação em runtime; o stub estático do pyright não reflete isso e
+        # acusa parâmetro/assinatura errados que na prática funcionam (testado).
+        return ChatAnthropic(  # pyright: ignore[reportCallIssue]
+            model=settings.ANTHROPIC_MODEL,  # pyright: ignore[reportCallIssue]
             api_key=settings.ANTHROPIC_API_KEY,
-            max_tokens=4096,
+            max_tokens=4096,  # pyright: ignore[reportCallIssue]
             timeout=60,
         )
 
