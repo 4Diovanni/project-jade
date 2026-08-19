@@ -191,8 +191,14 @@ class ConversationJournal:
         """Adiciona um turno (pergunta + resposta) e (re)escreve a nota."""
         if self._title is None:
             self._title = _title_from(user_message)
-            self._path = self._build_path()
             self._related = self._find_related(user_message)
+        if self._path is None:
+            # Verificação separada da de cima de propósito: se `_build_path()`
+            # levantou exceção numa chamada anterior (ex.: falha de I/O ao
+            # criar a pasta), `_title` já ficou preenchido mas `_path` não —
+            # sem isso, a checagem `_title is None` pularia a reconstrução do
+            # path e `write_text` quebraria com `_path` ainda em None.
+            self._path = self._build_path()
         self._turns.append((user_message, jade_reply))
         self._path.write_text(self._render(), encoding="utf-8")
         return self._path

@@ -251,7 +251,9 @@ def search_track(query: str) -> list[dict]:
     if not is_linked():
         return []
     sp = get_client()
-    results = sp.search(q=query, type="track", limit=5)
+    # sp.search pode devolver None (corpo de resposta vazio/não-JSON — ver
+    # spotipy Spotify._internal_call) mesmo numa chamada bem-sucedida.
+    results = sp.search(q=query, type="track", limit=5) or {}
     items = results.get("tracks", {}).get("items", [])
     return [_to_track_row(t, playlist_id=None, playlist_name=None) for t in items]
 
@@ -260,7 +262,8 @@ def play(track_id: str) -> str:
     """Manda tocar via Spotify Connect no dispositivo ativo (ou no
     primeiro disponível). Devolve o nome do dispositivo."""
     sp = get_client()
-    devices = sp.devices().get("devices", [])
+    # Mesmo motivo do search_track: sp.devices() pode voltar None.
+    devices = (sp.devices() or {}).get("devices", [])
     if not devices:
         raise NoActiveDeviceError("Nenhum dispositivo Spotify ativo.")
     device = next((d for d in devices if d.get("is_active")), devices[0])

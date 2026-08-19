@@ -33,6 +33,23 @@ _CONTEXT_TEMPLATE = (
 )
 
 
+def _content_to_text(content: str | list) -> str:
+    """Normaliza `BaseMessage.content` para texto puro.
+
+    Normalmente é só uma string, mas alguns providers (ex.: Claude) podem
+    devolver blocos estruturados em vez de string simples — extrai só os
+    blocos de texto, ignorando os demais (ex.: uso de tool)."""
+    if isinstance(content, str):
+        return content
+    parts = []
+    for block in content:
+        if isinstance(block, str):
+            parts.append(block)
+        elif isinstance(block, dict) and block.get("type") == "text":
+            parts.append(block.get("text", ""))
+    return "".join(parts)
+
+
 def _note_llm_usage(response) -> None:
     """Anota os contadores de token do provider, quando existirem.
 
@@ -215,9 +232,9 @@ class ChatSession:
             for chunk in llm.stream(messages):
                 full = chunk if full is None else full + chunk
                 if chunk.content:
-                    yield chunk.content
+                    yield _content_to_text(chunk.content)
         _note_llm_usage(full)
-        text = full.content if full is not None else ""
+        text = _content_to_text(full.content) if full is not None else ""
         with timed("journal"):
             self._record(message, text)
 
