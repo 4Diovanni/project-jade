@@ -7,6 +7,7 @@ em `_TOOLS`. (Passo automatizado pela skill `add-jade-tool`.)
 from __future__ import annotations
 
 from tools.base import JadeTool
+from tools.file_tool import FileCreateTool
 from tools.spotify_tool import SpotifyTool
 from tools.system_tool import SystemControlTool
 
@@ -16,6 +17,7 @@ _TOOLS: list[JadeTool] = [
     # (core/agent_router.py) usa a primeira tool cujo accepts() aceitar.
     SpotifyTool(),
     SystemControlTool(),
+    FileCreateTool(),
     # Registre novas tools aqui (e-mail, calendário...).
     # Obs.: a busca no vault (RAG) NÃO é uma tool — acontece direto no chat
     # (core.chat.ChatSession._retrieve_context), que injeta os trechos e deixa
