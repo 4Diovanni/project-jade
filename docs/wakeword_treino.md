@@ -29,7 +29,70 @@ negativos" (você fala e a Jade não acorda) ficar alto, vale tentar variações
 da frase (ex.: "oi jade", "okay jade") e comparar qual funciona melhor pra
 você.
 
-## Passo a passo
+## Caminho avançado: treinando com suas próprias gravações reais
+
+O notebook padrão (`automatic_model_training.ipynb`, o do passo a passo abaixo)
+**não tem nenhum ponto de entrada pra áudio real** — confirmado direto no
+código-fonte do notebook: ele só gera positivos via TTS sintético (vozes em
+inglês) e, quando você precisa de controle total sobre os dados de entrada,
+ele mesmo aponta pro notebook irmão
+[`training_models.ipynb`](https://github.com/dscripka/openWakeWord/blob/main/notebooks/training_models.ipynb)
+([abrir direto no Colab](https://colab.research.google.com/github/dscripka/openWakeWord/blob/main/notebooks/training_models.ipynb)).
+É esse notebook — não o "completo" padrão — que aceita uma pasta qualquer de
+`.wav` (inclusive suas gravações reais) como exemplos positivos.
+
+**Aviso:** o README oficial do openWakeWord chama esse notebook de
+"tutorial/educacional" e recomenda o pipeline automático pra modelos de
+produção — a técnica por baixo é a mesma (extração de embeddings + classificador),
+mas os defaults do notebook (poucos dados de exemplo, "turn on the office
+lights") são pensados pra ensinar o processo, não pra sair pronto pra uso real.
+Pra chegar num modelo utilizável você provavelmente vai precisar escalar o
+volume de dados negativos/background e validar o resultado com mais cuidado
+do que o notebook faz por padrão.
+
+Passo a passo (os nomes exatos de variáveis podem variar levemente entre
+versões do notebook — confira as células reais antes de editar):
+
+1. **Grave seu áudio real.** 20-30 gravações suas dizendo "ok jade", em tons/
+   velocidades/distâncias do microfone diferentes (ver aviso sobre sotaque no
+   topo deste documento). Corte cada clipe pra ~1-2s em torno só da frase,
+   16kHz, mono, PCM16 — é o formato que a etapa de filtragem dos positivos
+   (`filter_audio_paths(..., min_length_secs=1.0, max_length_secs=2.0)`)
+   espera. Junte tudo numa pasta, ex. `ok_jade_real/`.
+
+2. **Suba a pasta pro Colab** (arrasta pro painel de arquivos da sessão, ou
+   monte o Google Drive com `from google.colab import drive;
+   drive.mount('/content/drive')` se quiser que sobreviva a reinícios da
+   sessão).
+
+3. **Ache a célula que prepara os positivos** — algo como:
+   ```python
+   positive_clips, durations = openwakeword.data.filter_audio_paths(
+       ["turn_on_the_office_lights"],   # <- troque pelo caminho da sua pasta
+       min_length_secs=1.0,
+       max_length_secs=2.0,
+       duration_method="header",
+   )
+   ```
+   Troque `"turn_on_the_office_lights"` pelo caminho da sua pasta
+   (`ok_jade_real/` ou o caminho no Drive). 20-30 clipes reais sozinhos são
+   um dataset fino — se quiser mais volume, gere também variações sintéticas
+   (reaproveitando as células de TTS do `automatic_model_training.ipynb`) e
+   concatene as duas listas antes de seguir: `positive_clips = real_clips +
+   synthetic_clips`.
+
+4. **Rode o resto do notebook normalmente.** As células seguintes misturam
+   cada positivo com ruído de fundo (`mix_clips_batch`, augmentação de SNR) e
+   extraem os embeddings (`F.embed_clips`) pra um `.npy` — seus clipes reais
+   passam pelo mesmo pipeline dos sintéticos, sem tratamento especial. As
+   células de dados negativos não precisam de mudança (não usam sua voz).
+
+5. **Depois de treinado o classificador**, exporte pra `.onnx` (célula de
+   exportação perto do fim do notebook) e siga os passos 6-9 abaixo (baixar o
+   arquivo, salvar em `database/ok_jade.onnx`, apontar o `.env`) — o restante
+   do fluxo é idêntico ao caminho padrão.
+
+## Passo a passo (caminho padrão — só dados sintéticos)
 
 0. **Instale as dependências opcionais do wake-word** (não vêm no
    `requirements.txt` padrão — ver o motivo em `requirements-wakeword.txt`):
